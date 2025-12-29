@@ -1,0 +1,19 @@
+# ============================================================
+# DOJ Dataset-8 PDF Downloader — Requirements
+# ============================================================
+#
+# Python version:
+#   Python 3.9 or newer is required.
+#
+# This project uses Playwright for browser automation.
+# Installing Playwright via pip DOES NOT install browser binaries.
+#
+# After installing requirements, you MUST also run:
+#
+#   playwright install chromium
+#
+# This downloads the Chromium browser used for authentication.
+#
+# ============================================================
+
+playwright>=1.40.0
