@@ -1,6 +1,8 @@
 # epstein-ripper
 downloads .pdf files from DOJ website / epstein data-sets 
 
+# this script has been made to work well in my WSL workspace that uses ubuntu 24.04 #
+
 DOJ Dataset-8 PDF Downloader (Resumable)
 
 A resumable, human-verified Playwright downloader for the U.S. Department of Justice Epstein Data Set 8 document release.
