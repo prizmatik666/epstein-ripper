@@ -64,7 +64,7 @@ USAGE
 
 Run the script from its working directory:
 
-python3 downloader.py
+python3 doj_rip.py
 
 FIRST RUN
 
@@ -114,6 +114,10 @@ Resume logic relies on filenames
 
 This tool does NOT bypass authentication
 It pauses and waits for explicit user verification when required
+
+the DOJ websites security tokens expire quickly, so you will be prompted to click 'not a robot' button in browser window every 1-3 minutes, aprox.
+I know this is annoying, i went through this for the whole dataset #8 , which was 10,000 files +.
+one day when I have time, perhaps I will figure out a way to automate this action.
 
 KNOWN BEHAVIOR
 --------------
