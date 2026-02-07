@@ -1,5 +1,5 @@
 # ============================================================
-# DOJ Dataset-8 PDF Downloader — Requirements
+# epstein-ripper — Requirements
 # ============================================================
 #
 # Python version:

@@ -1,140 +1,304 @@
-# epstein-ripper
-downloads .pdf files from DOJ website / epstein data-sets 
+EPSTEIN-RIPPER
 
-# this script has been made to work well in my WSL workspace that uses ubuntu 24.04 #
+Reliable downloader and archival tool for DOJ Epstein dataset PDFs.
 
-DOJ Dataset-8 PDF Downloader (Resumable)
+  ----------
+  OVERVIEW
+  ----------
 
-A resumable, human-verified Playwright downloader for the U.S. Department of Justice Epstein Data Set 8 document release.
+epstein-ripper is a resilient crawler and downloader designed to archive
+the publicly released Epstein document datasets hosted on the U.S.
+Department of Justice website.
 
-This tool is designed to reliably download a large, gated PDF dataset that cannot be fetched with normal download managers due to:
+These datasets are difficult to download using standard download
+managers due to:
 
-short-lived authorization cookies
+ short-lived authorization cookies  anti-automation challenges 
+intermittent authorization expiration (401 errors)  large dataset size
+ unstable long-running downloads  pagination behavior that repeats
+pages
 
-anti-automation challenges
+This tool uses a real browser session and human verification when
+necessary, prioritizing reliability over aggressive scraping.
 
-non-resumable HTTP downloads
+  -----------------------------------
+  VERSION 2 CHANGES (MAJOR UPGRADE)
+  -----------------------------------
 
-intermittent 401 errors mid-run
+This project has evolved from a single-dataset downloader into a full
+crawler + downloader system.
 
-The script is intentionally conservative, transparent, and human-in-the-loop where required.
+Major upgrades include:
 
-FEATURES
+growth detection  Crash-safe downloads  Persistent dataset index 
+Resume-safe operation  Automatic repair of missing files  Dataset
+selection by user  Improved logging and recovery behavior
 
-Resumable downloads
-Automatically resumes from the last successful page and file
-Survives crashes, restarts, and auth expiration
+No hardcoded page limits remain.
 
-Human-verified access
-Uses Playwright with a real browser
-Pauses when DOJ requires “I am not a robot” verification
+  ---------------
+  CORE FEATURES
+  ---------------
 
-Safe re-authentication
-Detects expired authorization (401)
-Creates a fresh browser context when needed
+Dataset Selection
 
-Throttled & polite
-Built-in delays to reduce lockouts
-Sequential downloads only (no parallel hammering)
+Users can choose which datasets to download:
 
-Persistent logging
-Full activity log (download.log)
-Resume state stored in resume_state.txt
+    1,3,5
+    1-11
+    9-11
 
-OUTPUT STRUCTURE
+Dynamic Page Detection
 
-epstein_dataset_8_pdfs/ downloaded PDFs
-download.log detailed run log
-resume_state.txt last known good page
+The crawler scans pages until no new PDFs appear, automatically adapting
+to DOJ pagination changes.
 
-Do NOT rename or move files until the full run completes.
+Persistent Scan Index
 
-REQUIREMENTS
+Each dataset maintains its own index file:
+
+    dataX/index_dataX.json
+
+The index records:
+
+     discovered PDFs
+     source page numbers
+     download status
+     timestamps
+     retry counts
+
+This allows:
+
+     safe resume
+     crash recovery
+     missing file repair
+     dataset updates detection
+
+Crash-Safe Downloads
+
+Downloads are written safely using a temporary file:
+
+    filename.pdf.part
+
+Only after download completes successfully is the file renamed to:
+
+    filename.pdf
+
+This prevents crashes from leaving corrupted files marked complete.
+
+Automatic Repair of Missing Files
+
+If PDFs are missing locally but listed in the index, they are
+automatically downloaded on the next run.
+
+No cleanup scripts are required anymore.
+
+Human Verification Support
+
+When DOJ presents a verification challenge:
+
+     Browser pauses
+     User completes verification
+     Script resumes automatically
+
+No authentication bypass is attempted.
+
+Conservative Download Behavior
+
+Requests are throttled to reduce lockouts and server stress.
+
+No parallel download hammering is used.
+
+Persistent Logging
+
+All actions are recorded in:
+
+    download.log
+
+  ------------------
+  OUTPUT STRUCTURE
+  ------------------
+
+Example structure:
+
+    data9/
+        EFTA00012345.pdf
+        EFTA00012346.pdf
+        index_data9.json
+
+    resume_data9.txt
+    download.log
+
+Files:
+
+    PDFs                Downloaded documents
+    index_dataX.json   Dataset scan index
+    resume_dataX.txt   Last scanned page
+    download.log       Activity log
+
+Do not move or rename files while the script is running.
+
+  --------------
+  REQUIREMENTS
+  --------------
 
 Python 3.9 or newer
 
-Playwright (Chromium)
+Playwright with Chromium browser:
 
-Install dependencies:
+    pip install playwright
+    playwright install chromium
 
-pip install playwright
-playwright install chromium
+  -------
+  USAGE
+  -------
 
-USAGE
+Run from script directory:
 
-Run the script from its working directory:
+    python epstein_ripper.py
 
-python3 doj_rip.py
+You will be prompted for:
 
-FIRST RUN
+     dataset selection
+     operating mode
 
-A Chromium browser window will open
+  -------
+  MODES
+  -------
 
-If prompted, click “I am not a robot”
+sync (recommended) Scan DOJ pages and download missing files.
 
-Wait until the file list is visible
+scan Only update index, no downloads.
 
-Press ENTER in the terminal to continue
+download Download missing files using existing index.
 
-SUBSEQUENT RUNS
+  --------------------
+  FIRST RUN BEHAVIOR
+  --------------------
 
-The script resumes automatically
+1.  Browser window opens
+2.  Complete verification if requested
+3.  Wait until file list appears
+4.  Press ENTER in terminal
+5.  Script begins scanning and downloading
 
-No page re-scanning unless required
+  -----------------
+  RESUME BEHAVIOR
+  -----------------
 
-Re-auth only happens when DOJ expires the session
+The script resumes automatically using:
 
-RESUME LOGIC (HOW IT WORKS)
+     last scanned page
+    persistent dataset index
 
-The downloader tracks progress using two independent signals:
+Crashes and restarts are safe.
 
-Downloaded filenames
-Determines the last successfully saved PDF
+  -----------------
+  IMPORTANT NOTES
+  -----------------
 
-resume_state.txt
-Stores the last page known to contain downloaded files
+Do NOT:
 
-On restart:
+     close the browser window mid-run
+     rename files during operation
+     delete index files while running
 
-If a resume state exists, start directly from that page
+Resume logic depends on them.
 
-If not, perform a one-time scan to locate the correct page
+  ----------------
+  KNOWN BEHAVIOR
+  ----------------
 
-After that, resumes are instant
+DOJ pagination sometimes repeats pages.
 
-This avoids guessing page numbers or relying on filename math.
+The crawler stops scanning after several pages produce no new PDFs.
 
-IMPORTANT NOTES
+Some files may fail due to authorization expiration and will be retried
+automatically on later runs.
 
-Do NOT close the browser window manually during a run
-The script controls browser lifecycle
+  -----------------------
+  LEGACY CLEANUP SCRIPT
+  -----------------------
 
-Do NOT rename or delete PDFs mid-run
-Resume logic relies on filenames
+Older versions required a separate cleanup tool.
 
-This tool does NOT bypass authentication
-It pauses and waits for explicit user verification when required
+Version 2 automatically repairs missing downloads, making the cleanup
+script unnecessary.
 
-the DOJ websites security tokens expire quickly, so you will be prompted to click 'not a robot' button in browser window every 1-3 minutes, aprox.
-I know this is annoying, i went through this for the whole dataset #8 , which was 10,000 files +.
-one day when I have time, perhaps I will figure out a way to automate this action.
+  ------------
+  DISCLAIMER
+  ------------
 
-KNOWN BEHAVIOR
---------------
-A small number of files may fail during the main run due to auth expiry
+This tool accesses publicly available DOJ materials.
 
-This is expected and handled via a follow-up “missing files” pass
--the cleanup program makes a list of all the files on doj website to
-create a master file list- then compares that against what is in the local
-folder. It makes a list of needed files and downloads them.
+It does not bypass authentication or security controls.
 
-The repository intentionally separates bulk acquisition from gap repair
+All verification steps require explicit human interaction.
 
-DISCLAIMER
+Provided for archival, research, and transparency purposes.
 
-This tool is provided for research, archival, and transparency purposes.
+Use responsibly and in accordance with applicable laws and site terms.
 
-It accesses publicly available DOJ materials and does not attempt to circumvent security controls.
-All authentication steps require explicit human interaction.
 
-Use responsibly and in accordance with applicable laws and terms.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
