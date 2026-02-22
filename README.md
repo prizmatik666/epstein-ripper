@@ -1,9 +1,9 @@
 EPSTEIN-RIPPER
------------------------------------------------------
-# ⚠️⚠️⚠️ IMPORTANT DATA INTEGRITY NOTICE ⚠️⚠️⚠️ #
------------------------------------------------------
-# ADDED: 2/22/2026 ⚠️ PLEASE SCAN YOUR DATASETS ⚠️ #
------------------------------------------------------
+------------------------------------------
+# ⚠️ IMPORTANT DATA INTEGRITY NOTICE ⚠️ #
+----------------------------------------------
+# ADDED: 2/22/2026 PLEASE SCAN YOUR DATASETS #
+----------------------------------------------
 Previous versions of this project may have downloaded corrupted or invalid PDF files 
 due to upstream response behavior on justice.gov (HTML verification pages returned 
 with .pdf extensions).
@@ -31,8 +31,9 @@ Scans downloaded PDF datasets for integrity issues such as invalid file structur
 [ i had discovered while developing a search utility that DOJ had served me
  around 80k+ corrupted documents. Apparently the session cookie expired (or
  other similar behaviour) and resulted in the 'age verification' html page being saved as the intended .pdf ! I thought it was because i had set the sleep value to 0.00 - but uncovered, by using the active_watcher that after a few hours this behaviour repeated itself even with a proper sleep value set in the ripper ])
-----------------------------------------------------
-# ⚠️⚠️⚠️ END CRITICAL UPDATE / WARNING ⚠️⚠️⚠️   #
+-----------------------------------------
+# ⚠️ END CRITICAL UPDATE / WARNING ⚠️  #
+-----------------------------------------
 
 { Reliable downloader and archival tool for DOJ Epstein dataset PDFs. }
   ----------
