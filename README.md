@@ -267,27 +267,29 @@ The following utilities were added to support dataset validation, repair, and an
 These tools are optional but strongly recommended for anyone working with large DOJ datasets.
 
 active_watcher.py
------------------
+
 Purpose
 
 active_watcher.py is a live corruption detection and containment utility designed to run alongside the DOJ dataset downloader.
 
-It monitors the active dataset directory in real time and automatically detects when a downloaded file is not a valid PDF (e.g., HTML age-verification pages or server error pages).
+It continuously monitors a specified dataset directory in real time and automatically verifies that newly downloaded files are valid PDFs. If a file contains HTML content (such as age-verification pages, session timeouts, or server error responses) instead of a proper PDF header, it is immediately identified as corrupted.
 
 use:
-----
-(start epstein-ripper and in another terminal window(tmux tile/duplicated window/etc) launch the active_watcher and give it the directory to monitor
------
+(start epstein-ripper and in another terminal window (tmux tile/duplicated window/etc) launch the active_watcher and provide the directory to monitor)
 
 When corruption is detected, it:
 
-Emits a visible multi-line error alert
-Triggers a terminal bell
-Moves the corrupted file into a quarantine/ folder
-Pauses execution
-Waits for user confirmation before resuming
+Emits a highly visible multi-line error alert
+Triggers repeated terminal bell notifications
+Moves the corrupted file into a quarantine/ folder inside the dataset directory
+Enters a paused notification state awaiting user acknowledgment
 
-It maintains a persistent state file so it can resume safely after interruption.
+While in the paused state, scanning and quarantining continue silently in the background to prevent missed corruptions during unattended runs. Pressing Enter acknowledges the alert and restores normal console output without interrupting monitoring.
+
+The watcher maintains a persistent fingerprint-based state file (watcher_state.json) that tracks file size, modification time, and header signature. This ensures that restarts are safe, re-downloaded files with the same name are re-scanned automatically, and no files are skipped.
+
+All quarantine events are recorded in an append-only corruption_events.log file with timestamps for audit and review.
+-------------
 
 corruption_scan.py
 -------------
