@@ -267,7 +267,24 @@ The following utilities were added to support dataset validation, repair, and an
 These tools are optional but strongly recommended for anyone working with large DOJ datasets.
 
 active_watcher.py
+--------------------
+# IMPORTANT NOTICE #
+--------------------
+# 2/23/2026 note #
+I just updated the code. I found an error (not totally fixed but less a problem with this version ) 
+Found out that:
+- if theres .txt .py , other file extension files, etc . other than just .pdf's in the directory being monitored, then scanning will hang before starting and the file scans will never start due to a problem in the code and it's relationship with how monitor_state.json works.
+Fixes:
+- remove files other than .pdf's from the directory being scanned. It seems time it takes for scanning to take place w/ using watcher_state.json functionality depends on how many files are in dir/log - but it seems broken in general - i'll work on updates soon.
+BEST FIX FOR PROMPT SCANNING:
+- just delete or rename the current watcher_state.json file and start the program again. active dir scanning should start in under a minute with this fix.
 
+Explanation of Behaviours:
+- on subsequent runs i've noticed that it looks like the program isnt going to work and start scanning sometimes - but will start showing scan progress after anywhere from 5-15 minutes of looking 'idle'
+- this is annoying , and i do plan to figure it out- but wanted to warn ASAP.  - also, it seems the DOJ downloads will work fine for several hours before whatever expires that causes the <html> pages to start being whats downloaded.  JUST A HEADS UP !
+-------------------------------
+# acitve_watcher.py readme -> #
+-------------------------------
 Purpose
 
 active_watcher.py is a live corruption detection and containment utility designed to run alongside the DOJ dataset downloader.
