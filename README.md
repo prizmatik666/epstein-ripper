@@ -452,6 +452,11 @@ Forensic document analysis
 Quickly browsing extracted visuals independent of original PDFs
 Tracking image origins via mapping log
 
+index_repair.py
+-------------
+makes a .bak file of the index_data#.json file inside the dataset dir.
+scans existing files vs files in the index .json and if index has them marked as downloaded=True but they don't exist on disk - it will repair the .json and set them back to false.
+
 [ END UTILS ]
 
 
