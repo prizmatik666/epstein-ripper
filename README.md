@@ -25,7 +25,7 @@ Thank you for supporting independent open-source tools.
 # 2/25/2026 : updated epstein_ripper.py has a self contained
 # fix for this problem. active_watcher.py not neccessary to run
 # anymore.
-#--------------------------------------------#
+
 Previous versions of this project may have downloaded corrupted or invalid PDF files 
 due to upstream response behavior on justice.gov (HTML verification pages returned with .pdf extensions).
 
@@ -48,10 +48,6 @@ Monitors a target dataset directory in real time and scans new files of <html>(a
 
 corruption_scan.py
 Scans downloaded PDF datasets(directory) for integrity issues such as invalid file structures, HTML verification pages saved as .pdf, zero-byte files, or truncated downloads, and quarantines them.
-
-[ i had discovered while developing a search utility that DOJ had served me
- around 80k+ corrupted documents. Apparently the session cookie expired (or
- other similar behaviour) and resulted in the 'age verification' html page being saved as the intended .pdf ! I thought it was because i had set the sleep value to 0.00 - but uncovered, by using the active_watcher that after a few hours this behaviour repeated itself even with a proper sleep value set in the ripper ])
 -----------------------------------------
 # ⚠️ END CRITICAL UPDATE / WARNING ⚠️  #
 -----------------------------------------
