@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """
-Active Watcher ΓÇö HTML/age-verify corruption detector + quarantine mover
-Hardened edition (stupid-proof, mixed-folder safe):
+Active Watcher (vNext) — NEW-ONLY PDF corruption detector + quarantine mover
 
-- Watches ONLY PDFs in the selected directory (non-recursive)
-- Detects HTML/age-verify corruption by scanning header bytes
-- Moves corrupted PDFs into <watch_dir>/quarantine/
-- Non-blocking pause: waits for Enter to acknowledge but continues scanning silently
-- Writes corruption_events.log (append-only)
-- Uses watcher_state.json for resume, and self-heals if state is old/invalid
-- Prevents "silent freeze" by adding a max wait timeout to stable-size checks
+Design goal (by intent):
+- Takes a baseline snapshot of what exists at startup
+- ONLY scans PDFs that appear AFTER the program starts
+- Never scans older/backlog files that existed before launch
 
-This version is safe even if the watched folder contains .py/.txt/log/etc.
-Those files are ignored and never enter watcher_state.json.
+Features kept from prior builds:
+- Waits for file to finish writing (size stable)
+- Scans header bytes for HTML/age-verify/server-error pages
+- Loud alert: prints error banner 10x + terminal bell
+- Moves corrupted file into <watch_dir>/quarantine/
+- Enters PAUSED mode waiting for Enter to acknowledge
+  BUT continues scanning + quarantining silently in the background
+- Writes append-only corruption_events.log for audit/review
+
+Notes:
+- This watcher is intentionally session-based (no resume state file),
+  because the whole point is: scan only "incoming after start".
 """
 # ============================================================
 # Epstein DOJ Dataset Tools
@@ -29,25 +35,26 @@ Those files are ignored and never enter watcher_state.json.
 import os
 import sys
 import time
-import json
 import hashlib
 import select
 from pathlib import Path
 from datetime import datetime
 
 # ===================== CONFIG =====================
-WATCH_EXTENSIONS = {".pdf"}         # <-- HARD FILTER: only PDFs are watched/tracked
-
 POLL_INTERVAL_SEC = 0.5
-STABLE_CHECKS = 2
-STABLE_INTERVAL_SEC = 0.25
-STABLE_MAX_WAIT_SEC = 10.0         # <-- prevents infinite stalls
 
-HEADER_READ_BYTES = 8192
-STATE_FILENAME = "watcher_state.json"
+WATCH_EXTENSIONS = {".pdf"}          # only scan these
 QUARANTINE_DIRNAME = "quarantine"
 EVENTS_LOG_FILENAME = "corruption_events.log"
 
+HEADER_READ_BYTES = 8192
+
+# Stable-write detection
+STABLE_CHECKS = 2
+STABLE_INTERVAL_SEC = 0.25
+STABLE_MAX_WAIT_SEC = 12.0           # prevents per-file infinite stall
+
+# While paused, how often to reprint the reminder (seconds)
 PAUSE_REMINDER_EVERY_SEC = 15
 # ==================================================
 
@@ -65,58 +72,18 @@ def term_bell(times: int = 6):
     sys.stdout.write("\a" * times)
     sys.stdout.flush()
 
-def is_watched_file(name: str) -> bool:
-    return Path(name).suffix.lower() in WATCH_EXTENSIONS
-
-def load_state(state_path: Path) -> dict:
-    if state_path.exists():
-        try:
-            return json.loads(state_path.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
-    return {}
-
-def save_state(state_path: Path, state: dict):
-    tmp = state_path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
-    tmp.replace(state_path)
-
-def backup_bad_state(state_path: Path):
-    try:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        bak = state_path.with_name(f"{state_path.name}.bak_{ts}")
-        state_path.replace(bak)
-    except Exception:
-        pass
-
-def validate_or_reset_state(state_path: Path, watch_dir: Path) -> dict:
-    """
-    Expected schema:
-      {"watch_dir": "...", "files": { "name.pdf": {"size":..,"mtime_ns":..,"hh":..}, ... }}
-    Any mismatch => backup + reset (no user intervention).
-    """
-    state = load_state(state_path)
-    ok = (
-        isinstance(state, dict)
-        and state.get("watch_dir") == str(watch_dir)
-        and isinstance(state.get("files"), dict)
-    )
-    if not ok:
-        if state_path.exists():
-            backup_bad_state(state_path)
-        state = {"watch_dir": str(watch_dir), "files": {}}
-        save_state(state_path, state)
-    return state
-
 def append_event(log_path: Path, line: str):
     try:
         with log_path.open("a", encoding="utf-8") as f:
             f.write(line.rstrip("\n") + "\n")
     except Exception:
-        pass
+        pass  # never crash due to logging
 
-def list_root_pdfs(watch_dir: Path):
-    """Non-recursive list of ONLY PDFs in watch_dir root, excluding quarantine directory."""
+def is_watched_file(name: str) -> bool:
+    return Path(name).suffix.lower() in WATCH_EXTENSIONS
+
+def list_root_watched_files(watch_dir: Path):
+    """Non-recursive list of watched files in root, excluding quarantine dir."""
     out = []
     for entry in os.scandir(watch_dir):
         if entry.is_dir() and entry.name == QUARANTINE_DIRNAME:
@@ -126,7 +93,10 @@ def list_root_pdfs(watch_dir: Path):
     return out
 
 def wait_until_stable(file_path: Path) -> bool:
-    """Wait until file size stops changing, but never block forever."""
+    """
+    Wait until file size stops changing for STABLE_CHECKS intervals,
+    but never block longer than STABLE_MAX_WAIT_SEC.
+    """
     last_size = None
     stable = 0
     start = time.time()
@@ -154,6 +124,7 @@ def wait_until_stable(file_path: Path) -> bool:
     return True
 
 def header_is_html(file_path: Path) -> bool:
+    """Detect HTML/age-verify pages by checking header bytes."""
     try:
         with file_path.open("rb") as f:
             head = f.read(HEADER_READ_BYTES)
@@ -163,39 +134,22 @@ def header_is_html(file_path: Path) -> bool:
     if not head:
         return True
 
-    # Valid PDF signature
+    # Strong pass: valid PDF signature
     if head.startswith(b"%PDF-"):
         return False
 
     head_lc = head.lower()
+
     for m in HTML_MARKERS:
         if m in head_lc:
             return True
 
+    # Additional heuristic: leading '<' + common HTML/JS hints
     if head[:1] == b"<":
         if b"</" in head_lc or b"document" in head_lc or b"script" in head_lc:
             return True
 
     return False
-
-def header_hash(file_path: Path) -> str:
-    try:
-        with file_path.open("rb") as f:
-            head = f.read(HEADER_READ_BYTES)
-    except Exception:
-        return "READ_ERROR"
-    return hashlib.sha1(head).hexdigest()
-
-def file_fingerprint(file_path: Path) -> dict:
-    try:
-        st = file_path.stat()
-        return {
-            "size": int(st.st_size),
-            "mtime_ns": int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1e9))),
-            "hh": header_hash(file_path),
-        }
-    except FileNotFoundError:
-        return {"missing": True}
 
 def big_corruption_warning(file_name: str):
     msg = "ERROR! CORRUPTED FILE DOWNLOADED!"
@@ -206,6 +160,7 @@ def big_corruption_warning(file_name: str):
     term_bell(times=10)
 
 def move_to_quarantine(src: Path, quarantine_dir: Path) -> Path | None:
+    """Move src into quarantine_dir; auto-rename if collision."""
     quarantine_dir.mkdir(parents=True, exist_ok=True)
 
     base = src.stem
@@ -234,6 +189,7 @@ def move_to_quarantine(src: Path, quarantine_dir: Path) -> Path | None:
             return None
 
 def enter_pressed_nonblocking() -> bool:
+    """Non-blocking Enter detection (WSL/Linux)."""
     try:
         r, _, _ = select.select([sys.stdin], [], [], 0)
         if r:
@@ -244,7 +200,7 @@ def enter_pressed_nonblocking() -> bool:
     return False
 
 def main():
-    print("=== Active Watcher (HTML corruption detector + quarantine) ===")
+    print("=== Active Watcher vNext (NEW-ONLY PDF corruption detector + quarantine) ===")
     watch_dir_input = input("Directory to watch: ").strip().strip('"').strip("'")
     if not watch_dir_input:
         print("No directory entered. Exiting.")
@@ -256,130 +212,115 @@ def main():
         return
 
     quarantine_dir = (watch_dir / QUARANTINE_DIRNAME).resolve()
+    events_log_path = Path.cwd() / EVENTS_LOG_FILENAME
 
-    run_dir = Path.cwd()
-    state_path = run_dir / STATE_FILENAME
-    events_log_path = run_dir / EVENTS_LOG_FILENAME
-
-    state = validate_or_reset_state(state_path, watch_dir)
-    known: dict = state.get("files", {})
-
-    # HARDEN: purge any non-PDF keys if legacy state ever had them
-    nonpdf_keys = [k for k in known.keys() if not is_watched_file(k)]
-    if nonpdf_keys:
-        for k in nonpdf_keys:
-            known.pop(k, None)
-        state["files"] = known
-        save_state(state_path, state)
+    # --- BASELINE SNAPSHOT: ignore everything that exists at startup ---
+    baseline = set(list_root_watched_files(watch_dir))
+    seen_after_start = set()  # names first seen after startup (session-only)
 
     paused = False
     last_pause_reminder = 0.0
 
-    # Startup visibility so you KNOW it sees PDFs immediately
-    initial_pdfs = list_root_pdfs(watch_dir)
     print(f"[{now_ts()}] Watching: {watch_dir}")
-    print(f"[{now_ts()}] Watching extensions: {', '.join(sorted(WATCH_EXTENSIONS))}")
-    print(f"[{now_ts()}] PDFs currently present: {len(initial_pdfs)}")
+    print(f"[{now_ts()}] Mode: NEW-ONLY (baseline snapshot taken at startup)")
+    print(f"[{now_ts()}] Baseline PDFs ignored: {len(baseline)}")
     print(f"[{now_ts()}] Quarantine: {quarantine_dir}")
-    print(f"[{now_ts()}] State: {state_path}")
     print(f"[{now_ts()}] Events Log: {events_log_path}")
     print("Press Ctrl+C to stop.\n")
 
     append_event(
         events_log_path,
-        f"{now_ts()} | START | watch_dir={watch_dir} | quarantine={quarantine_dir} | state={state_path}"
+        f"{now_ts()} | START | mode=new_only | watch_dir={watch_dir} | quarantine={quarantine_dir}"
     )
+    append_event(events_log_path, f"{now_ts()} | BASELINE | ignored_existing_pdfs={len(baseline)}")
 
     try:
         while True:
+            # If paused, allow Enter to acknowledge without blocking scanning
             if paused and enter_pressed_nonblocking():
                 paused = False
                 print(f"\n[{now_ts()}] Acknowledged. Resuming normal output.\n")
                 append_event(events_log_path, f"{now_ts()} | ACK | user_acknowledged_pause")
 
-            current_names = set(list_root_pdfs(watch_dir))  # <-- ONLY PDFs
+            current = set(list_root_watched_files(watch_dir))
 
-            # Fast prune: remove state entries for PDFs that no longer exist
-            removed_names = set(known.keys()) - current_names
-            if removed_names:
-                for n in removed_names:
-                    known.pop(n, None)
-                state["files"] = known
-                save_state(state_path, state)
+            # NEW-ONLY logic:
+            # new arrivals = current - baseline - already_seen_after_start - quarantine dir excluded by lister
+            new_arrivals = current - baseline - seen_after_start
+            if new_arrivals:
+                # Sort new arrivals by mtime (nice ordering)
+                items = []
+                for name in new_arrivals:
+                    p = watch_dir / name
+                    try:
+                        st = p.stat()
+                        items.append((st.st_mtime, name))
+                    except FileNotFoundError:
+                        continue
+                items.sort(key=lambda x: (x[0], x[1]))
 
-            # Sort PDFs by mtime then name
-            items = []
-            for name in current_names:
-                p = watch_dir / name
-                try:
-                    st = p.stat()
-                    items.append((st.st_mtime, name))
-                except FileNotFoundError:
-                    continue
-            items.sort(key=lambda x: (x[0], x[1]))
+                for _, name in items:
+                    p = watch_dir / name
 
-            for _, name in items:
-                p = watch_dir / name
+                    # Mark as seen (so we don’t spin on it forever if it’s slow)
+                    seen_after_start.add(name)
 
-                # Wait for stable write, but skip if it won't settle quickly
-                if not wait_until_stable(p):
-                    continue
+                    # Wait for download to finish writing (best effort)
+                    if not wait_until_stable(p):
+                        # If it didn't stabilize, we'll still consider it "seen" this session.
+                        # It will get rescanned only if it disappears and reappears (new file event),
+                        # which matches the "new-only" contract.
+                        append_event(events_log_path, f"{now_ts()} | SKIP | {name} | reason=not_stable_in_time")
+                        continue
 
-                fp = file_fingerprint(p)
-                prev = known.get(name)
-
-                if prev != fp:
+                    # Scan header for HTML/corruption
                     bad = header_is_html(p)
                     if bad:
+                        # Loud warning regardless of paused state
                         big_corruption_warning(name)
 
                         dest = move_to_quarantine(p, quarantine_dir)
                         if dest:
                             rel = f"{QUARANTINE_DIRNAME}/{dest.name}"
-                            print(f"[{now_ts()}] Moved to quarantine: {dest.name}")
+                            if not paused:
+                                print(f"[{now_ts()}] Moved to quarantine: {dest.name}")
                             append_event(
                                 events_log_path,
                                 f"{now_ts()} | CORRUPTED | {name} | moved_to={rel} | reason=html_header_detected"
                             )
                         else:
-                            print(f"[{now_ts()}] WARNING: failed to move {name} to quarantine!")
+                            if not paused:
+                                print(f"[{now_ts()}] WARNING: failed to move {name} to quarantine!")
                             append_event(
                                 events_log_path,
                                 f"{now_ts()} | CORRUPTED | {name} | moved_to=FAILED | reason=html_header_detected"
                             )
 
+                        # Enter paused mode, but do NOT block scanning
                         if not paused:
                             paused = True
                             last_pause_reminder = time.time()
-                            print(f"\n[{now_ts()}] PAUSED ΓÇö press Enter to acknowledge. (Scanning continues silently.)\n")
+                            print(f"\n[{now_ts()}] PAUSED — press Enter to acknowledge. (Scanning continues silently.)\n")
                             append_event(events_log_path, f"{now_ts()} | PAUSE | corruption_detected_waiting_for_ack")
-
-                        known.pop(name, None)
 
                     else:
                         if not paused:
                             print(f"{name} checked - PASS")
-                        known[name] = fp
+                        append_event(events_log_path, f"{now_ts()} | PASS | {name}")
 
-                    state["files"] = known
-                    save_state(state_path, state)
-
+            # While paused, reprint reminder occasionally (so you notice)
             if paused:
                 t = time.time()
                 if (t - last_pause_reminder) >= PAUSE_REMINDER_EVERY_SEC:
                     last_pause_reminder = t
                     term_bell(times=2)
-                    print(f"[{now_ts()}] PAUSED ΓÇö press Enter to acknowledge. (Scanning continues silently.)")
+                    print(f"[{now_ts()}] PAUSED — press Enter to acknowledge. (Scanning continues silently.)")
 
             time.sleep(POLL_INTERVAL_SEC)
 
     except KeyboardInterrupt:
-        print("\nStopped by user (Ctrl+C). Saving state...")
-        state["files"] = known
-        save_state(state_path, state)
+        print("\nStopped by user (Ctrl+C).")
         append_event(events_log_path, f"{now_ts()} | STOP | user_interrupt")
-        print(f"State saved to: {state_path}")
-        print(f"Events log: {events_log_path}")
 
 if __name__ == "__main__":
     main()

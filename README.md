@@ -41,10 +41,10 @@ New utilities have been added to detect and repair affected datasets.
 See the **Utilities** section below for instructions.
 
 active_watcher.py
-Monitors a target dataset directory in real time and reports file additions, modifications, and deletions. This is useful during large download or repair operations to confirm activity, detect stalled processes, and observe unexpected file behavior without manually refreshing folders.
+Monitors a target dataset directory in real time and scans new files of <html>(age verification page) - which signal a corrupted download-upon finding corrupted .pdf's it will move them to a quarantine folder.
 
 corruption_scan.py
-Scans downloaded PDF datasets for integrity issues such as invalid file structures, HTML verification pages saved as .pdf, zero-byte files, or truncated downloads. Generates a report of corrupted or suspicious files so they can be selectively re-downloaded and repaired.
+Scans downloaded PDF datasets(directory) for integrity issues such as invalid file structures, HTML verification pages saved as .pdf, zero-byte files, or truncated downloads, and quarantines them.
 
 [ i had discovered while developing a search utility that DOJ had served me
  around 80k+ corrupted documents. Apparently the session cookie expired (or
@@ -285,21 +285,7 @@ The following utilities were added to support dataset validation, repair, and an
 These tools are optional but strongly recommended for anyone working with large DOJ datasets.
 
 active_watcher.py
---------------------
-# IMPORTANT NOTICE #
---------------------
-# 2/23/2026 note #
-I just updated the code. I found an error (not totally fixed but less a problem with this version ) 
-Found out that:
-- if theres .txt .py , other file extension files, etc . other than just .pdf's in the directory being monitored, then scanning will hang before starting and the file scans will never start due to a problem in the code and it's relationship with how monitor_state.json works.
-Fixes:
-- remove files other than .pdf's from the directory being scanned. It seems time it takes for scanning to take place w/ using watcher_state.json functionality depends on how many files are in dir/log - but it seems broken in general - i'll work on updates soon.
-BEST FIX FOR PROMPT SCANNING:
-- just delete or rename the current watcher_state.json file and start the program again. active dir scanning should start in under a minute with this fix.
 
-Explanation of Behaviours:
-- on subsequent runs i've noticed that it looks like the program isnt going to work and start scanning sometimes - but will start showing scan progress after anywhere from 5-15 minutes of looking 'idle'
-- this is annoying , and i do plan to figure it out- but wanted to warn ASAP.  - also, it seems the DOJ downloads will work fine for several hours before whatever expires that causes the <html> pages to start being whats downloaded.  JUST A HEADS UP !
 -------------------------------
 # acitve_watcher.py readme -> #
 -------------------------------
@@ -310,7 +296,7 @@ active_watcher.py is a live corruption detection and containment utility designe
 It continuously monitors a specified dataset directory in real time and automatically verifies that newly downloaded files are valid PDFs. If a file contains HTML content (such as age-verification pages, session timeouts, or server error responses) instead of a proper PDF header, it is immediately identified as corrupted.
 
 use:
-(start epstein-ripper and in another terminal window (tmux tile/duplicated window/etc) launch the active_watcher and provide the directory to monitor)
+(start active_watcher.py, specify dataset directory to be monitored, and in another terminal window (tmux tile/duplicated window/etc) launch the epstein_ripper.py)
 
 When corruption is detected, it:
 
@@ -320,8 +306,6 @@ Moves the corrupted file into a quarantine/ folder inside the dataset directory
 Enters a paused notification state awaiting user acknowledgment
 
 While in the paused state, scanning and quarantining continue silently in the background to prevent missed corruptions during unattended runs. Pressing Enter acknowledges the alert and restores normal console output without interrupting monitoring.
-
-The watcher maintains a persistent fingerprint-based state file (watcher_state.json) that tracks file size, modification time, and header signature. This ensures that restarts are safe, re-downloaded files with the same name are re-scanned automatically, and no files are skipped.
 
 All quarantine events are recorded in an append-only corruption_events.log file with timestamps for audit and review.
 -------------
