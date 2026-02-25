@@ -8,7 +8,18 @@ Standalone Directory Corruption Scanner
 - Moves corrupted files into: <dir>/quarantine/
 - Auto-renames on filename collision
 """
-
+# ============================================================
+# Epstein DOJ Dataset Tools
+#
+# Author: Prizm (Prizmatik Underground)
+# Repository:
+# https://github.com/prizmatik666/epstein-ripper
+#
+# Support Development:
+# PayPal: https://www.paypal.com/ncp/payment/VVDAXZGKPQZKW
+# Email: prizmatikug@gmail.com
+#
+# ============================================================
 import os
 from pathlib import Path
 from datetime import datetime

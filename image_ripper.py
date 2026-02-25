@@ -3,7 +3,18 @@ import threading
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
-
+# ============================================================
+# Epstein DOJ Dataset Tools
+#
+# Author: Prizm (Prizmatik Underground)
+# Repository:
+# https://github.com/prizmatik666/epstein-ripper
+#
+# Support Development:
+# PayPal: https://www.paypal.com/ncp/payment/VVDAXZGKPQZKW
+# Email: prizmatikug@gmail.com
+#
+# ============================================================
 # Primary extractor
 try:
     import fitz  # PyMuPDF

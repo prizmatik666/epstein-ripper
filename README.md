@@ -1,4 +1,22 @@
 EPSTEIN-RIPPER
+## Support This Project
+
+This project is developed and maintained independently by Prizm
+(Prizmatik Underground).
+
+If this tool has been useful to you, consider supporting future
+development and research:
+
+PayPal Donation Link:
+https://www.paypal.com/ncp/payment/VVDAXZGKPQZKW
+
+PayPal Email:
+prizmatikug@gmail.com
+
+Original Repository:
+https://github.com/prizmatik666/epstein-ripper
+
+Thank you for supporting independent open-source tools.
 ------------------------------------------
 # ⚠️ IMPORTANT DATA INTEGRITY NOTICE ⚠️ #
 ----------------------------------------------
