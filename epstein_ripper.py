@@ -1,15 +1,4 @@
-import os
-import re
-import json
-import time
-import hashlib
-import argparse
-import asyncio
-from urllib.parse import urljoin, urlparse
-from datetime import datetime
-from typing import Dict, Any, List, Tuple, Optional
-
-from playwright.async_api import async_playwright
+#!/usr/bin/env python3
 # ============================================================
 # Epstein DOJ Dataset Tools
 #
@@ -21,20 +10,38 @@ from playwright.async_api import async_playwright
 # PayPal: https://www.paypal.com/ncp/payment/VVDAXZGKPQZKW
 # Email: prizmatikug@gmail.com
 #
-# ============================================================
-# UPDATED VERSION: 2/6/2026                             #
+# ======================================================#
+# UPDATED VERSION: 2/25/2026                            #
 #-------------------------------------------------------#
-# added a ui for dataset # selection.                   #
-# added log/history support for memory persistence      #
-# across sessions making re-run's less painful.         #
-# I didn't realize i was only pulling up to page 220    #
-# so now it goes until a dataset runs out of pages.     #
+#  THIS VERSION HAS A FIX FOR THE HTML-PAGE AS PDF PROBLEM
+# NOTE (Session-Poison Protection):
+# DOJ sometimes returns an HTML gate/age-verify/bot-wall page with HTTP 200 instead of a real PDF.
+# This ripper prevents corrupted saves by downloading to a temporary ".part" file, then validating
+# the PDF signature ("%PDF-") before committing the final ".pdf". If the response is not a PDF,
+# it triggers a SESSION_POISON pause: prints a loud alert + bell, waits for user confirmation,
+# rebuilds a fresh Playwright browser context (re-auth), and retries the same file. Normal HTTP
+# errors like 404 are logged and skipped without forcing a context refresh.
 #-------------------------------------------------------#
+# ================= CONFIG =================
+import os
+import re
+import json
+import time
+import hashlib
+import argparse
+import asyncio
+import sys
+from urllib.parse import urljoin, urlparse
+from datetime import datetime
+from typing import Dict, Any, List, Tuple, Optional
+
+from playwright.async_api import async_playwright
+
 # ================= CONFIG =================
 
 BASE_SITE = "https://www.justice.gov"
 
-# DOJ currently has datasets 1ΓÇô11 (adjust later if they add more)
+# DOJ currently has datasets 1–11 (adjust later if they add more)
 DATASET_RANGE = range(1, 12)
 
 DATASETS = {
@@ -57,7 +64,7 @@ SLEEP_BETWEEN_PAGES = 1.5
 MAX_PAGES_WITH_NO_NEW_PDFS = 6     # stop after N pages in a row yield no NEW pdfs
 MAX_PAGES_HARD_CAP = 200000        # safety valve to avoid infinite loops
 
-# Retry behavior
+# Retry behavior (for real download failures; session-poison does NOT consume retries)
 MAX_DOWNLOAD_RETRIES = 3
 
 # =========================================
@@ -178,7 +185,7 @@ async def create_fresh_context(browser, first_page_url: str):
     context = await browser.new_context()
     page = await context.new_page()
 
-    log("NEW CONTEXT ΓÇö opening dataset page for DOJ auth")
+    log("NEW CONTEXT — opening dataset page for DOJ auth")
     await page.goto(first_page_url, wait_until="load")
 
     print("\n=== AUTH REQUIRED ===")
@@ -280,9 +287,26 @@ def needs_download(out_path: str, entry: Dict[str, Any]) -> bool:
     return True
 
 
+def bytes_look_like_pdf(b: bytes) -> bool:
+    return b.startswith(b"%PDF-")
+
+
+def loud_session_poison_alert(dataset_id: int, filename: str):
+    msg = f"[DS {dataset_id}] ERROR! NON-PDF RESPONSE (HTML / GATE) for {filename}"
+    print("\n" + "=" * 78)
+    for _ in range(10):
+        print(msg)
+    print("=" * 78 + "\n")
+    sys.stdout.write("\a" * 10)
+    sys.stdout.flush()
+
+
 async def download_one(context, pdf_url: str, referer: str, out_path: str) -> Tuple[bool, str]:
     """
     Atomic download to out_path + '.part', then rename.
+    Special behavior:
+      - If HTTP 200 but body is not a PDF signature, treat as SESSION_POISON.
+      - Do NOT write/commit the file.
     Returns (ok, error_message)
     """
     part_path = out_path + ".part"
@@ -295,17 +319,38 @@ async def download_one(context, pdf_url: str, referer: str, out_path: str) -> Tu
             pass
 
     resp = await fetch_pdf(context, pdf_url, referer)
+    status = resp.status
 
-    if resp.status == 200:
-        body = await resp.body()
-        with open(part_path, "wb") as f:
-            f.write(body)
-        os.replace(part_path, out_path)
-        return True, ""
-    return False, f"HTTP {resp.status}"
+    if status != 200:
+        return False, f"HTTP {status}"
+
+    body = await resp.body()
+
+    # Signature sniff (do not rely on Content-Type; sites can lie)
+    head = body[:16] if body else b""
+    if not body or not bytes_look_like_pdf(head):
+        # likely HTML gate / session expired / bot wall / age verify
+        try:
+            if os.path.exists(part_path):
+                os.remove(part_path)
+        except Exception:
+            pass
+        return False, "SESSION_POISON"
+
+    with open(part_path, "wb") as f:
+        f.write(body)
+    os.replace(part_path, out_path)
+    return True, ""
 
 
-async def scan_dataset_pages(page, dataset_id: int, base_url: str, out_dir: str, state_file: str, idx: Dict[str, Any]) -> Dict[str, Any]:
+async def scan_dataset_pages(
+    page,
+    dataset_id: int,
+    base_url: str,
+    out_dir: str,
+    state_file: str,
+    idx: Dict[str, Any],
+) -> Dict[str, Any]:
     """
     Scans pages until it stops finding NEW PDFs for MAX_PAGES_WITH_NO_NEW_PDFS pages in a row.
     Updates idx in-place and persists periodically.
@@ -379,10 +424,17 @@ async def scan_dataset_pages(page, dataset_id: int, base_url: str, out_dir: str,
     return idx
 
 
-async def download_missing_from_index(context, dataset_id: int, out_dir: str, idx: Dict[str, Any]) -> int:
+async def download_missing_from_index(
+    browser,
+    context,
+    dataset_id: int,
+    out_dir: str,
+    idx: Dict[str, Any],
+    base_url: str,
+) -> Tuple[int, Any]:
     """
     Downloads any indexed PDFs that aren't downloaded yet.
-    Returns count of newly downloaded files.
+    Returns (count_of_new_downloads, possibly_refreshed_context).
     """
     files = idx["files"]
     completed = 0
@@ -408,7 +460,6 @@ async def download_missing_from_index(context, dataset_id: int, out_dir: str, id
                 entry["bytes"] = os.path.getsize(out_path)
             except Exception:
                 pass
-            # hash is optional (can be slow), but you can enable later
             safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
             continue
 
@@ -423,11 +474,13 @@ async def download_missing_from_index(context, dataset_id: int, out_dir: str, id
         referer = DATASETS[dataset_id]["base_url"].format(page_num if isinstance(page_num, int) and page_num >= 1 else 1)
 
         log(f"[DS {dataset_id}] DOWNLOAD {filename}")
-        entry["attempts"] = int(entry.get("attempts", 0)) + 1
 
         ok, err = await download_one(context, pdf_url, referer, out_path)
 
         if ok:
+            # Real successful attempt
+            entry["attempts"] = int(entry.get("attempts", 0)) + 1
+
             entry["downloaded"] = True
             entry["downloaded_at"] = datetime.now().isoformat(timespec="seconds")
             entry["last_error"] = None
@@ -439,16 +492,46 @@ async def download_missing_from_index(context, dataset_id: int, out_dir: str, id
             completed += 1
             log(f"[DS {dataset_id}] DONE ({completed}) {filename}")
 
-            # Persist after each success (crash-safe)
             safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
             await asyncio.sleep(SLEEP_BETWEEN_DOWNLOADS)
-        else:
-            entry["last_error"] = err
-            log(f"[DS {dataset_id}] ERROR {err} for {filename}")
-            safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
-            await asyncio.sleep(SLEEP_BETWEEN_DOWNLOADS)
+            continue
 
-    return completed
+        # Not ok:
+        if err == "SESSION_POISON":
+            # Do NOT consume a retry for this; the session is poisoned, not the file.
+            entry["last_error"] = "SESSION_POISON (non-PDF response)"
+            log(f"[DS {dataset_id}] SESSION POISON DETECTED while downloading {filename}")
+            safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
+
+            loud_session_poison_alert(dataset_id, filename)
+            print("Downloader PAUSED to prevent corrupted HTML downloads.")
+            print("Action required: refresh DOJ session/auth in the browser window.")
+            input("Press ENTER to open a fresh session context and resume downloads...\n")
+
+            # Rebuild context + re-auth
+            try:
+                await context.close()
+            except Exception:
+                pass
+
+            context, auth_page = await create_fresh_context(browser, base_url.format(1))
+            try:
+                await auth_page.close()
+            except Exception:
+                pass
+
+            log(f"[DS {dataset_id}] Session refreshed. Retrying {filename}...")
+            await asyncio.sleep(0.1)
+            continue
+
+        # Normal errors (404 etc): keep behavior as-is and DO consume a retry attempt
+        entry["attempts"] = int(entry.get("attempts", 0)) + 1
+        entry["last_error"] = err
+        log(f"[DS {dataset_id}] ERROR {err} for {filename}")
+        safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
+        await asyncio.sleep(SLEEP_BETWEEN_DOWNLOADS)
+
+    return completed, context
 
 
 async def process_dataset(browser, dataset_id: int, cfg: Dict[str, Any], mode: str) -> None:
@@ -467,7 +550,6 @@ async def process_dataset(browser, dataset_id: int, cfg: Dict[str, Any], mode: s
     log(f"Output dir: {out_dir}")
     log(f"Index file: {idx_path}")
 
-    # Always open auth context if we may scan OR download
     context = None
     page = None
 
@@ -478,22 +560,24 @@ async def process_dataset(browser, dataset_id: int, cfg: Dict[str, Any], mode: s
             idx = await scan_dataset_pages(page, dataset_id, base_url, out_dir, state_file, idx)
 
         if mode in {"download", "sync"}:
-            # Download uses context.request, so we don't need the visual page except for auth gating
-            completed = await download_missing_from_index(context, dataset_id, out_dir, idx)
-            log(f"[DS {dataset_id}] Download pass complete ΓÇö {completed} new PDFs")
+            completed, context = await download_missing_from_index(browser, context, dataset_id, out_dir, idx, base_url)
+            log(f"[DS {dataset_id}] Download pass complete — {completed} new PDFs")
 
-        # Save final index
         safe_json_save(idx_path, idx)
 
     except Exception as e:
         log(f"[DS {dataset_id}] FATAL ERROR: {repr(e)}")
-        # still persist index so rerun can continue cleanly
         try:
             safe_json_save(idx_path, idx)
         except Exception:
             pass
         raise
     finally:
+        if page is not None:
+            try:
+                await page.close()
+            except Exception:
+                pass
         if context is not None:
             try:
                 await context.close()
@@ -584,4 +668,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

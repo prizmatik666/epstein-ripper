@@ -22,9 +22,12 @@ Thank you for supporting independent open-source tools.
 ----------------------------------------------
 # ADDED: 2/22/2026 PLEASE SCAN YOUR DATASETS #
 ----------------------------------------------
+# 2/25/2026 : updated epstein_ripper.py has a self contained
+# fix for this problem. active_watcher.py not neccessary to run
+# anymore.
+#--------------------------------------------#
 Previous versions of this project may have downloaded corrupted or invalid PDF files 
-due to upstream response behavior on justice.gov (HTML verification pages returned 
-with .pdf extensions).
+due to upstream response behavior on justice.gov (HTML verification pages returned with .pdf extensions).
 
 This can result in:
 - Large numbers of corrupted files
@@ -265,8 +268,27 @@ DOJ pagination sometimes repeats pages.
 
 The crawler stops scanning after several pages produce no new PDFs.
 
-Some files may fail due to authorization expiration and will be retried
-automatically on later runs.
+Session Expiration / HTML Gate Protection
+
+The DOJ site occasionally returns an HTML page (age verification, bot check,
+or expired session notice) with HTTP 200 instead of a real PDF. This can
+silently corrupt downloads if not detected.
+
+The ripper prevents this by validating the PDF file signature ("%PDF-")
+before saving. If a non-PDF response is detected:
+
+• The file is NOT written.
+• A loud alert is displayed.
+• Downloads are paused.
+• The user is prompted to re-authenticate in the browser.
+• A fresh browser context is created.
+• The same file is retried safely.
+
+Normal HTTP errors (such as 404 for removed files) do NOT trigger a
+re-authentication. They are logged and skipped.
+
+This mechanism ensures long-running sessions do not accumulate corrupted
+HTML files disguised as PDFs.
 
   -----------------------
   LEGACY CLEANUP SCRIPT
