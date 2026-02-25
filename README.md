@@ -17,15 +17,33 @@ Original Repository:
 https://github.com/prizmatik666/epstein-ripper
 
 Thank you for supporting independent open-source tools.
-------------------------------------------
-# ⚠️ IMPORTANT DATA INTEGRITY NOTICE ⚠️ #
-----------------------------------------------
+----------------------------------------
+PLEASE READ BELOW! IMPORTANT INFORMATION
+-------------------------------------------
+# ⚠️ IMPORTANT DATA INTEGRITY NOTICES ⚠️ #
+-------------------------------------------
+# ADDED: 2/25/2026 indexing/page count problems
+-------------------------------------------
+I thought 6 consecutive pages with no new pdf's would be
+enough for reliable scans- since it's nearly impossible to
+find out what the last page is in a dataset. DOJ will repeat the last
+page's pdf list for pages above the end, or remix the pdf list . There 
+doesnt seem to be an actual end! 
+the code has it hardcoded (easy to change) to stop scanning after 6 pages
+with no new pdf's - i've found thats not good enough, i just had to rescan
+dataset 9 - my scan topped out at page1013 - goes way past that on the site.
+so i've upped the # to 300 and am scanning again. It will have a few no new pdf scans then all of a sudden *found 50 new pdfs*
+SO JUST BEWARE! and rescan after setting the page timeout value to an absurd
+integer -.- grrrr!!!! still thinking on better ways/methods to do this. but wanted to warn everyone for sake of data integrity. hours and hours of trial and error trying to make this work the best i can.
+
+i cant understate enough how terrible the DOJ is for releasing these in the way that they have. terrible interface...cant even have a set 'last page' or way to find it..what BS !
+
 # ADDED: 2/22/2026 PLEASE SCAN YOUR DATASETS #
 ----------------------------------------------
-# 2/25/2026 : updated epstein_ripper.py has a self contained
+# 2/25/2026 : The updated epstein_ripper.py has a self contained
 # fix for this problem. active_watcher.py not neccessary to run
 # anymore.
-
+-----------------------------------------------
 Previous versions of this project may have downloaded corrupted or invalid PDF files 
 due to upstream response behavior on justice.gov (HTML verification pages returned with .pdf extensions).
 
@@ -38,16 +56,11 @@ If you previously downloaded datasets using earlier versions of this tool,
 you MUST validate your files.
 
 I thought it best to make these utils instead of altering the core 
-code of the ripper.
+code of the ripper for now.
 
 New utilities have been added to detect and repair affected datasets.
 See the **Utilities** section below for instructions.
 
-active_watcher.py
-Monitors a target dataset directory in real time and scans new files of <html>(age verification page) - which signal a corrupted download-upon finding corrupted .pdf's it will move them to a quarantine folder.
-
-corruption_scan.py
-Scans downloaded PDF datasets(directory) for integrity issues such as invalid file structures, HTML verification pages saved as .pdf, zero-byte files, or truncated downloads, and quarantines them.
 -----------------------------------------
 # ⚠️ END CRITICAL UPDATE / WARNING ⚠️  #
 -----------------------------------------
@@ -289,7 +302,9 @@ HTML files disguised as PDFs.
   -----------------------
   LEGACY CLEANUP SCRIPT
   -----------------------
-
+-----------------
+2/26/2026- I will be remaking this tool. Just to make sure that option is available to users.
+-----------------
 Older versions required a separate cleanup tool.
 
 Version 2 automatically repairs missing downloads, making the cleanup
@@ -382,6 +397,11 @@ You are preparing for a repair pass
 
 It is safe to run multiple times.
 Already quarantined files will not be rescanned.
+
+index_repair.py
+-------------
+makes a .bak file of the index_data#.json file inside the dataset dir.
+scans existing files vs files in the index .json and if index has them marked as downloaded=True but they don't exist on disk - it will repair the .json and set them back to false.
 -------------------------------
 # END DATA VERIFICATION UTILS #
 -------------------------------
@@ -452,10 +472,6 @@ Forensic document analysis
 Quickly browsing extracted visuals independent of original PDFs
 Tracking image origins via mapping log
 
-index_repair.py
--------------
-makes a .bak file of the index_data#.json file inside the dataset dir.
-scans existing files vs files in the index .json and if index has them marked as downloaded=True but they don't exist on disk - it will repair the .json and set them back to false.
 
 [ END UTILS ]
 
