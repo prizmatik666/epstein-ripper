@@ -26,6 +26,19 @@ PLEASE READ BELOW! IMPORTANT INFORMATION
 -------------------------------------------
 # ⚠️ IMPORTANT DATA INTEGRITY NOTICES ⚠️ #
 -------------------------------------------
+# ADDED: 2/26/2026 UPGRADED VERSION OF
+# index_repair.py  use the new one
+-------------------------------------------
+it was flipping downloaded=true to false like it was supposed to
+but with problems it's ment to solve, it also needs to flip false to true when appropriate . This came about when i was working with making the new index_tools section of utilities and experimenting with converting .db files to .json , comparing them.
+ making sure the index scanner worked right running on fresh index file.
+ i converted a db scan to a new index_data#.json and ran indexrepair on it. Thats when i found out it wasnt flipping the existing files to dl=True in the fresh imported index file. 
+
+ tldr= use the new one!
+ -> index_tools/ are not neccessary for functionality
+ -> index_files/ is where i'll be including index_data#.json files i've made from doing my own scans and checks - in case you want to use them vs doing the scan yourself. 
+     - data9's took me around 12+ hours to get through scanning , so further .json's wont be uploaded for a while, i'll get them up as they come and get checked.
+     
 # ADDED: 2/25/2026 indexing/page count problems
 -------------------------------------------
 I thought 6 consecutive pages with no new pdf's would be
