@@ -17,6 +17,10 @@ Original Repository:
 https://github.com/prizmatik666/epstein-ripper
 
 Thank you for supporting independent open-source tools.
+CHECK THE DISCUSSION PAGE FOR CURRENT INFO/CHANGES/PLANS
+- i've started using the discussion page to also update on progress
+- with fixing various problems/behaviours , as well as giving updates
+- on planned changes/expansions of current tools.
 ----------------------------------------
 PLEASE READ BELOW! IMPORTANT INFORMATION
 -------------------------------------------
