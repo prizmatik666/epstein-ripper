@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-# ============================================================
+#
+#     Prizm presents
+#   ▄████████    ▄███████▄    ▄████████  ▄█     ▄███████▄
+#  ███    ███   ███    ███   ███    ███ ███    ███    ███
+#  ███    █▀    ███    ███   ███    ███ ███▌   ███    ███
+# ▄███▄▄▄       ███    ███  ▄███▄▄▄▄██▀ ███▌   ███    ███
+#▀▀███▀▀▀     ▀█████████▀  ▀▀███▀▀▀▀▀   ███▌ ▀█████████▀
+#  ███    █▄    ███        ▀███████████ ███    ███
+#  ███    ███   ███ STEIN  - ███    ███ ███    ███ PER
+#  ██████████  ▄████▀        ███    ███ █▀    ▄████▀
+#                            ███    ███ version 2.1
+#                        A Prizmatik Underground Production
+# =========================================================
 # Epstein DOJ Dataset Tools
 #
 # Author: Prizm (Prizmatik Underground)
@@ -21,6 +33,8 @@
 # it triggers a SESSION_POISON pause: prints a loud alert + bell, waits for user confirmation,
 # rebuilds a fresh Playwright browser context (re-auth), and retries the same file. Normal HTTP
 # errors like 404 are logged and skipped without forcing a context refresh.
+# BUT- a 404 error during download would suggest files that DOJ removed
+# since your datasets index file was built - sneaky sneaky
 #-------------------------------------------------------#
 # ================= CONFIG =================
 import os
@@ -42,7 +56,8 @@ from playwright.async_api import async_playwright
 BASE_SITE = "https://www.justice.gov"
 
 # DOJ currently has datasets 1–11 (adjust later if they add more)
-DATASET_RANGE = range(1, 12)
+# updated to max to 13 , allowing dataset12 downloads/scans
+DATASET_RANGE = range(1, 13)
 
 DATASETS = {
     n: {
@@ -61,7 +76,11 @@ SLEEP_BETWEEN_DOWNLOADS = 0.75
 SLEEP_BETWEEN_PAGES = 1.5
 
 # Stop conditions
-MAX_PAGES_WITH_NO_NEW_PDFS = 6     # stop after N pages in a row yield no NEW pdfs
+# I increased max_pages_with_no_new_pdfs from 6 to 30
+# If you want to ensure you most likely scanned every
+# pdf in a dataset- i suggest upping it higher to 300
+# for better confidence .
+MAX_PAGES_WITH_NO_NEW_PDFS = 30     # stop after N pages in a row yield no NEW pdfs
 MAX_PAGES_HARD_CAP = 200000        # safety valve to avoid infinite loops
 
 # Retry behavior (for real download failures; session-poison does NOT consume retries)

@@ -1,6 +1,309 @@
-EPSTEIN-RIPPER
-## Support This Project
+# EPSTEIN-RIPPER
 
+Reliable, resumable archival downloader and validator for DOJ Epstein
+disclosure datasets.
+
+------------------------------------------------------------------------
+
+## Overview
+
+`epstein-ripper` is a resilient browser-driven crawler and downloader
+designed to archive publicly released Epstein document datasets hosted
+by the U.S. Department of Justice.
+
+The DOJ interface presents multiple challenges:
+
+-   Pagination that repeats or remixes pages
+-   No reliable "last page" indicator
+-   Short-lived authorization cookies
+-   Anti-automation challenges
+-   Occasional HTML responses served as `.pdf` files
+
+This tool prioritizes reliability, integrity, and safe resume behavior, while striving to be user friendl.
+During the pursuit of establishing consistent and accurate index's of the DOJ's file lists i've found manyobstacles. I've done my best to defeat them to accomplish this goal, and to share with you. 
+
+Please leave a star, watch, or fork to help spread this software to those who may use it. Thank you for reading, cloning, using, etc ! 
+
+The pursuit of truth, justice, and .pdf punishment is imperative. We're all a tool for change.
+            - Prizm 
+
+------------------------------------------------------------------------
+
+## Quick Start
+
+``` bash
+git clone https://github.com/prizmatik666/epstein-ripper
+cd epstein-ripper
+pip install -r requirements.txt
+playwright install chromium
+python epstein_ripper.py
+```
+
+You will be prompted for:
+
+-   Dataset selection
+-   Operating mode (sync / scan / download)
+
+------------------------------------------------------------------------
+
+## Core Features
+
+### Dataset Selection
+
+Choose individual datasets or ranges:
+
+    1,3,5
+    1-11
+    9-11
+
+### Dynamic Page Detection
+
+Pages are scanned until no new PDFs appear for a defined threshold.\
+Pagination behavior from DOJ is unpredictable --- this system adapts.
+
+### Persistent Scan Index
+
+Each dataset maintains its own index:
+
+    dataX/index_dataX.json
+
+The index tracks:
+
+-   Discovered PDFs
+-   Source page numbers
+-   Download status
+-   Retry counts
+-   Timestamps
+
+This enables:
+
+-   Crash-safe resume
+-   Missing file repair
+-   Safe re-walk scanning
+-   Update detection
+
+### Crash-Safe Downloads
+
+Files download to:
+
+    filename.pdf.part
+
+They are renamed only after validation completes.\
+This prevents partial or corrupted files from being marked complete.
+
+### Session Protection
+
+If DOJ returns HTML instead of a real PDF:
+
+-   File is NOT written
+-   A visible alert is triggered
+-   Download pauses
+-   User re-authenticates
+-   Fresh context is created
+-   File is safely retried
+
+Normal HTTP errors do not trigger re-authentication.
+
+------------------------------------------------------------------------
+
+## Operating Modes
+
+  Mode         Behavior
+  ------------ ---------------------------------------------
+  `sync`       Scan + download missing files (recommended)
+  `scan`       Scan only, update index
+  `download`   Download missing files using existing index
+
+------------------------------------------------------------------------
+
+## Output Structure
+
+Example:
+
+    data9/
+        EFTA00012345.pdf
+        index_data9.json
+
+    resume_data9.txt
+    download.log
+
+Files:
+
+-   PDFs --- Downloaded documents
+-   `index_dataX.json` --- Scan index
+-   `resume_dataX.txt` --- Last scanned page
+-   `download.log` --- Activity log
+
+Do not rename or delete files while the script is running.
+
+------------------------------------------------------------------------
+
+## Data Integrity Notes
+
+### Updated index_repair.py (2/26/2026)
+
+The upgraded repair utility:
+
+-   Correctly flips `downloaded=False ΓåÆ True` when files exist
+-   Correctly flips `downloaded=True ΓåÆ False` when missing
+-   Provides structured integrity reporting
+
+Use the updated version.
+
+### Pagination Warning (2/25/2026)
+
+DOJ pagination can repeat page results far beyond actual dataset depth.\
+Short "no new page" thresholds are unsafe.
+
+The default stop threshold was increased significantly after real-world
+testing revealed new PDFs appearing thousands of pages later.
+
+If performing deep archival scans, use a high no-new threshold.
+
+### Validation Required for Older Downloads
+
+Older versions may have saved HTML as PDFs due to upstream behavior.
+
+If you downloaded datasets before the validation upgrade:
+
+-   Run integrity utilities
+-   Validate file signatures
+-   Perform a repair pass
+
+------------------------------------------------------------------------
+
+## Main Utilities
+
+Optional but recommended tools are included for dataset validation and
+analysis.
+
+### active_watcher.py
+
+Real-time corruption detection while downloading.
+
+-   Monitors dataset directory
+-   Validates PDF headers
+-   Quarantines corrupted files
+-   Logs quarantine events
+-   Pauses with visible alert until acknowledged
+
+- this was included as a temporary fix utility while
+- a fix was being implemented for the 'html-served-as-.pdf' bug
+- no longer needed to be utilized during downloads as the check
+- happens inside the ripper now before saving to disk.
+
+------------------------------------------------------------------------
+
+### corruption_scan.py
+
+One-time sweep utility.
+
+-   Scans a directory for corrupted files
+-   Validates `%PDF-` signature
+-   Detects HTML markers
+-   Moves corrupted files to `quarantine/`
+-   Prints summary report
+-   If files are removed from a dataset, run index_repair to flip the 
+    download= value back to false in the index
+
+Safe to run multiple times.
+
+------------------------------------------------------------------------
+
+### index_repair.py
+
+Index reconciliation tool.
+
+-   Creates `.bak` backup of index
+-   Validates disk vs index state
+-   Repairs mismatches(downloaded=True/False)
+-   Reports correctness buckets
+-   Safe to rerun
+-   After running corruptions_scan on a dataset - if it removes files
+    run index_repair on that datasets index to flip the downloaded value
+    back to false
+------------------------------------------------------------------------
+
+### image_ripper.py
+
+Bulk embedded image extractor (GUI).
+
+Extracts embedded images from large PDF collections.
+
+Features:
+
+-   Recursive folder scanning
+-   Incremental re-run support
+-   Process tracking via `processed_pdfs.txt`
+-   Image mapping log (`image_map.txt`)
+
+Requirements:
+
+    pip install pymupdf pillow
+
+Designed for:
+
+-   Large disclosure datasets
+-   Forensic review
+-   Visual content isolation
+
+------------------------------------------------------------------------
+
+## Requirements
+
+-   Python 3.9+
+-   Playwright
+-   Chromium browser (installed via Playwright)
+
+```{=html}
+<!-- -->
+```
+    pip install playwright
+    playwright install chromium
+
+------------------------------------------------------------------------
+
+## index_files/
+------------------------------------------------------------------------
+ - This is where I include index_data#.json file's that i've made through scanning the datasets. 
+ - If you wish to use mine instead of scanning and building your own index - move the .json for the dataset your working with into it's data#/ directory, named as index_data#.json exactly (where # = dataset number)
+ - If you already have downloads in your data#/ when deciding to try one of my index files- run index_repair.py on it before downloading again. it will set the files you have on disk to downloaded=True in the index , so theyre not downloaded again.
+- Scans to build full indexes on these massive datasets take a LONG time. I will be uploading them as I get them ready.
+
+## index_tools/
+------------------------------------------------------------------------
+I'm working with doing scanning with a util that scans and uses a sqlte database for the index file instead of .json
+
+using sql/db files for the download index in the ripper is not currently supported - but will probably add in that option later. 
+
+mostly i'm experimenting with:
+    - speed and reliability of the sql scan vs. the built in ripper -> .json scanner for making the index file.
+    - how the DOJ site behaves as far as serving duplicate file list pages in higher # page's in the various datasets
+        - data9 started having alot of trouble after page 1000
+          -db scanner couldnt break out of the 'same file list' loop
+          that was happening
+          - the built in ripper scan had the same problem but would eventually break out of a no-new streak. It had high value streaks: more than 100,200 no-new-pdf's in a row before breaking out and returning new filenames. 
+              -i ran my data9 scan with max no new @ 300. 
+[2026-02-25 21:58:57] [DS 9] No NEW PDFs on page 7990 (streak=300/300)
+[2026-02-25 21:59:00] [DS 9] Stopping scan: no new PDFs for 300 consecutive pages.
+[2026-02-25 21:59:14] === DATASET 9 COMPLETE ===
+[2026-02-25 21:59:58] ALL DATASETS COMPLETE 
+            - doj's pagination makes knowing if your dataset file list is complete, but with 300 as the end count for no-new , you can have a much higher confidence that you scanned everything.
+  
+  I will be trying to find the fastest, most reliable, and above all ACURATE - way of indexing the file names for download. I thought it would be good to include those tools here now to make updates easier - and for others to play around with.
+
+  - index_tools contains:
+  - db_index.py -> the page scanner to build file index w/ database
+  - db_to_json.py -> converts a db_index scan file into a ripper
+      useable .json for downloading
+  - dupe_check.py -> checks a .json index for duplicate entries
+  - dupe_index.py -> duplicates a .json index and flips all download=
+      values to false - making it into a fresh runable copy to be shared or freshly ran for download.
+          - will make it useable on db files when db functionality is
+           adopted in the main program also
+
+## Support
+------------------------------------------------------------------------
 This project is developed and maintained independently by Prizm
 (Prizmatik Underground).
 
@@ -17,556 +320,18 @@ Original Repository:
 https://github.com/prizmatik666/epstein-ripper
 
 Thank you for supporting independent open-source tools.
-CHECK THE DISCUSSION PAGE FOR CURRENT INFO/CHANGES/PLANS
-- i've started using the discussion page to also update on progress
-- with fixing various problems/behaviours , as well as giving updates
-- on planned changes/expansions of current tools.
-----------------------------------------
-PLEASE READ BELOW! IMPORTANT INFORMATION
--------------------------------------------
-# ⚠️ IMPORTANT DATA INTEGRITY NOTICES ⚠️ #
--------------------------------------------
-# ADDED: 2/26/2026 UPGRADED VERSION OF
-# index_repair.py  use the new one
--------------------------------------------
-it was flipping downloaded=true to false like it was supposed to
-but with problems it's ment to solve, it also needs to flip false to true when appropriate . This came about when i was working with making the new index_tools section of utilities and experimenting with converting .db files to .json , comparing them.
- making sure the index scanner worked right running on fresh index file.
- i converted a db scan to a new index_data#.json and ran indexrepair on it. Thats when i found out it wasnt flipping the existing files to dl=True in the fresh imported index file. 
 
- tldr= use the new one!
- -> index_tools/ are not neccessary for functionality
- -> index_files/ is where i'll be including index_data#.json files i've made from doing my own scans and checks - in case you want to use them vs doing the scan yourself. 
-     - data9's took me around 12+ hours to get through scanning , so further .json's wont be uploaded for a while, i'll get them up as they come and get checked.
-     
-# ADDED: 2/25/2026 indexing/page count problems
--------------------------------------------
-I thought 6 consecutive pages with no new pdf's would be
-enough for reliable scans- since it's nearly impossible to
-find out what the last page is in a dataset. DOJ will repeat the last
-page's pdf list for pages above the end, or remix the pdf list . There 
-doesnt seem to be an actual end! 
-the code has it hardcoded (easy to change) to stop scanning after 6 pages
-with no new pdf's - i've found thats not good enough, i just had to rescan
-dataset 9 - my scan topped out at page1013 - goes way past that on the site.
-so i've upped the # to 300 and am scanning again. It will have a few no new pdf scans then all of a sudden *found 50 new pdfs*
-SO JUST BEWARE! and rescan after setting the page timeout value to an absurd
-integer -.- grrrr!!!! still thinking on better ways/methods to do this. but wanted to warn everyone for sake of data integrity. hours and hours of trial and error trying to make this work the best i can.
+If you don't want to donate thats totally fine, but please, if you found this helpful- star the repo :) thank you!!
 
-i cant understate enough how terrible the DOJ is for releasing these in the way that they have. terrible interface...cant even have a set 'last page' or way to find it..what BS !
+Death to .PDF's
 
-# ADDED: 2/22/2026 PLEASE SCAN YOUR DATASETS #
-----------------------------------------------
-# 2/25/2026 : The updated epstein_ripper.py has a self contained
-# fix for this problem. active_watcher.py not neccessary to run
-# anymore.
------------------------------------------------
-Previous versions of this project may have downloaded corrupted or invalid PDF files 
-due to upstream response behavior on justice.gov (HTML verification pages returned with .pdf extensions).
+------------------------------------------------------------------------
 
-This can result in:
-- Large numbers of corrupted files
-- HTML content saved as PDF
-- Incomplete or invalid datasets
-
-If you previously downloaded datasets using earlier versions of this tool,
-you MUST validate your files.
-
-I thought it best to make these utils instead of altering the core 
-code of the ripper for now.
-
-New utilities have been added to detect and repair affected datasets.
-See the **Utilities** section below for instructions.
-
------------------------------------------
-# ⚠️ END CRITICAL UPDATE / WARNING ⚠️  #
------------------------------------------
-
-{ Reliable downloader and archival tool for DOJ Epstein dataset PDFs. }
-  ----------
-  OVERVIEW
-  ----------
-
-epstein-ripper is a resilient crawler and downloader designed to archive
-the publicly released Epstein document datasets hosted on the U.S.
-Department of Justice website.
-
-These datasets are difficult to download using standard download
-managers due to:
-
- short-lived authorization cookies  anti-automation challenges 
-intermittent authorization expiration (401 errors)  large dataset size
- unstable long-running downloads  pagination behavior that repeats
-pages
-
-This tool uses a real browser session and human verification when
-necessary, prioritizing reliability over aggressive scraping.
-
-  -----------------------------------
-  VERSION 2 CHANGES (MAJOR UPGRADE)
-  -----------------------------------
-
-This project has evolved from a single-dataset downloader into a full
-crawler + downloader system.
-
-Major upgrades include:
-
-growth detection  Crash-safe downloads  Persistent dataset index 
-Resume-safe operation  Automatic repair of missing files  Dataset
-selection by user  Improved logging and recovery behavior
-
-No hardcoded page limits remain.
-
-  ---------------
-  CORE FEATURES
-  ---------------
-
-Dataset Selection
-
-Users can choose which datasets to download:
-
-    1,3,5
-    1-11
-    9-11
-
-Dynamic Page Detection
-
-The crawler scans pages until no new PDFs appear, automatically adapting
-to DOJ pagination changes.
-
-Persistent Scan Index
-
-Each dataset maintains its own index file:
-
-    dataX/index_dataX.json
-
-The index records:
-
-     discovered PDFs
-     source page numbers
-     download status
-     timestamps
-     retry counts
-
-This allows:
-
-     safe resume
-     crash recovery
-     missing file repair
-     dataset updates detection
-
-Crash-Safe Downloads
-
-Downloads are written safely using a temporary file:
-
-    filename.pdf.part
-
-Only after download completes successfully is the file renamed to:
-
-    filename.pdf
-
-This prevents crashes from leaving corrupted files marked complete.
-
-Automatic Repair of Missing Files
-
-If PDFs are missing locally but listed in the index, they are
-automatically downloaded on the next run.
-
-No cleanup scripts are required anymore.
-
-Human Verification Support
-
-When DOJ presents a verification challenge:
-
-     Browser pauses
-     User completes verification
-     Script resumes automatically
-
-No authentication bypass is attempted.
-
-Conservative Download Behavior
-
-Requests are throttled to reduce lockouts and server stress.
-
-No parallel download hammering is used.
-
-Persistent Logging
-
-All actions are recorded in:
-
-    download.log
-
-  ------------------
-  OUTPUT STRUCTURE
-  ------------------
-
-Example structure:
-
-    data9/
-        EFTA00012345.pdf
-        EFTA00012346.pdf
-        index_data9.json
-
-    resume_data9.txt
-    download.log
-
-Files:
-
-    PDFs                Downloaded documents
-    index_dataX.json   Dataset scan index
-    resume_dataX.txt   Last scanned page
-    download.log       Activity log
-
-Do not move or rename files while the script is running.
-
-  --------------
-  REQUIREMENTS
-  --------------
-
-Python 3.9 or newer
-
-Playwright with Chromium browser:
-
-    pip install playwright
-    playwright install chromium
-
-  -------
-  USAGE
-  -------
-
-Run from script directory:
-
-    python epstein_ripper.py
-
-You will be prompted for:
-
-     dataset selection
-     operating mode
-
-  -------
-  MODES
-  -------
-
-sync (recommended) Scan DOJ pages and download missing files.
-
-scan Only update index, no downloads.
-
-download Download missing files using existing index.
-
-  --------------------
-  FIRST RUN BEHAVIOR
-  --------------------
-
-1.  Browser window opens
-2.  Complete verification if requested
-3.  Wait until file list appears
-4.  Press ENTER in terminal
-5.  Script begins scanning and downloading
-
-  -----------------
-  RESUME BEHAVIOR
-  -----------------
-
-The script resumes automatically using:
-
-     last scanned page
-    persistent dataset index
-
-Crashes and restarts are safe.
-
-  -----------------
-  IMPORTANT NOTES
-  -----------------
-
-Do NOT:
-
-     close the browser window mid-run
-     rename files during operation
-     delete index files while running
-
-Resume logic depends on them.
-
-  ----------------
-  KNOWN BEHAVIOR
-  ----------------
-
-DOJ pagination sometimes repeats pages.
-
-The crawler stops scanning after several pages produce no new PDFs.
-
-Session Expiration / HTML Gate Protection
-
-The DOJ site occasionally returns an HTML page (age verification, bot check,
-or expired session notice) with HTTP 200 instead of a real PDF. This can
-silently corrupt downloads if not detected.
-
-The ripper prevents this by validating the PDF file signature ("%PDF-")
-before saving. If a non-PDF response is detected:
-
-• The file is NOT written.
-• A loud alert is displayed.
-• Downloads are paused.
-• The user is prompted to re-authenticate in the browser.
-• A fresh browser context is created.
-• The same file is retried safely.
-
-Normal HTTP errors (such as 404 for removed files) do NOT trigger a
-re-authentication. They are logged and skipped.
-
-This mechanism ensures long-running sessions do not accumulate corrupted
-HTML files disguised as PDFs.
-
-  -----------------------
-  LEGACY CLEANUP SCRIPT
-  -----------------------
------------------
-2/26/2026- I will be remaking this tool. Just to make sure that option is available to users.
------------------
-Older versions required a separate cleanup tool.
-
-Version 2 automatically repairs missing downloads, making the cleanup
-script unnecessary.
-
-
-🧰 Utilities
----------------
-The following utilities were added to support dataset validation, repair, and analysis — particularly in response to upstream HTML verification pages being saved as .pdf files during large pulls.
-
-These tools are optional but strongly recommended for anyone working with large DOJ datasets.
-
-active_watcher.py
-
--------------------------------
-# acitve_watcher.py readme -> #
--------------------------------
-Purpose
-
-active_watcher.py is a live corruption detection and containment utility designed to run alongside the DOJ dataset downloader.
-
-It continuously monitors a specified dataset directory in real time and automatically verifies that newly downloaded files are valid PDFs. If a file contains HTML content (such as age-verification pages, session timeouts, or server error responses) instead of a proper PDF header, it is immediately identified as corrupted.
-
-use:
-(start active_watcher.py, specify dataset directory to be monitored, and in another terminal window (tmux tile/duplicated window/etc) launch the epstein_ripper.py)
-
-When corruption is detected, it:
-
-Emits a highly visible multi-line error alert
-Triggers repeated terminal bell notifications
-Moves the corrupted file into a quarantine/ folder inside the dataset directory
-Enters a paused notification state awaiting user acknowledgment
-
-While in the paused state, scanning and quarantining continue silently in the background to prevent missed corruptions during unattended runs. Pressing Enter acknowledges the alert and restores normal console output without interrupting monitoring.
-
-All quarantine events are recorded in an append-only corruption_events.log file with timestamps for audit and review.
--------------
-
-corruption_scan.py
--------------
-Purpose
-
-corruption_scanner.py is a manual cleanup utility that scans an existing dataset directory for corrupted files and isolates them.
-
-Unlike active_watcher.py, this tool does not run continuously.
-It performs a one-time sweep of a directory when executed.
-
-What It Does
---------------
-Prompts for a directory to scan
-Scans all files in the root of that directory (non-recursive)
-Reads the file header (first ~8KB)
-Verifies valid PDF signature (%PDF-)
-
-Detects HTML corruption markers such as:
-
-<html>
-<!doctype html>
-<head>
-<title>
-
-Moves corrupted files into:
-<dataset_directory>/quarantine/
-
-Auto-renames files on collision (e.g., file__q1.pdf)
-
-Prints a final summary:
-Total files scanned
-Corrupted files moved
-Clean files remaining
-
-Why This Exists:
----------------
-If a download session was interrupted, rate-limited, or corrupted before active_watcher.py was running, HTML documents may already exist inside the dataset directory.
-
-This utility allows you to:
----------------
-Clean up after an overnight run
-Sweep an older dataset revision
-Prepare a directory for a clean re-download attempt
-Verify dataset integrity before indexing or searching
-
-Use Case
----------------
-Run corruption_scanner.py when:
-The downloader is stopped
-You suspect prior corruption occurred
-You want a fast integrity check
-You are preparing for a repair pass
-
-It is safe to run multiple times.
-Already quarantined files will not be rescanned.
-
-index_repair.py
--------------
-makes a .bak file of the index_data#.json file inside the dataset dir.
-scans existing files vs files in the index .json and if index has them marked as downloaded=True but they don't exist on disk - it will repair the .json and set them back to false.
--------------------------------
-# END DATA VERIFICATION UTILS #
--------------------------------
-# IMAGE EXTRACTION UTILITY    #
-# image_ripper.py             #
--------------------------------
-image_ripper.py — Bulk PDF Image Extractor
-
-image_ripper.py is a GUI utility for extracting embedded images from large collections of PDFs. It was built for high-volume dataset analysis (e.g., DOJ disclosures) and supports incremental re-runs without duplicating work.
-
-What It Does
-------------
-Recursively scans one or more selected folders for .pdf files
-Extracts all embedded image objects using PyMuPDF
-
-Saves extracted images into:
-./ripped_images/
-
-Generates a mapping file:
-ripped_images/image_map.txt
-
-Each entry correlates:
-<extracted_image_filename> → <source_pdf_path> + page number + image index
-------------
-⚡Incremental Processing (Smart Re-Runs)
-------------
-The utility tracks processed PDFs using:
-ripped_images/processed_pdfs.txt
-
-Each PDF is recorded with:
--------------
-absolute_path | file_size | last_modified_time
-
-On subsequent runs:
--------------
- Unchanged PDFs are skipped instantly
- Newly added PDFs are processed
- Modified PDFs are automatically reprocessed
- No duplicate re-ripping of previously processed files
-
-This allows safe re-running on growing datasets without wasting time or disk space.
-
-What Gets Extracted?
--------------
-Embedded image objects (photos, scans, screenshots, etc.)
-Full-page scans in rasterized PDFs
-Logos, stamps, and embedded graphics
-
-Note: This utility does not render vector text pages to images. It only extracts actual embedded image objects.
--------------
-📦 Output Structure
--------------
-project_directory/
-├── image_ripper.py
-├── ripped_images/
-│   ├── image_map.txt
-│   ├── processed_pdfs.txt
-│   ├── <extracted images...>
-
-Requirements:
---------------
-pip install pymupdf pillow
-
-
-Designed for:
-Large public disclosure datasets
-Forensic document analysis
-Quickly browsing extracted visuals independent of original PDFs
-Tracking image origins via mapping log
-
-
-[ END UTILS ]
-
-
-  ------------
-  DISCLAIMER
-  ------------
+## Disclaimer
 
 This tool accesses publicly available DOJ materials.
-
 It does not bypass authentication or security controls.
-
 All verification steps require explicit human interaction.
-
 Provided for archival, research, and transparency purposes.
-
 Use responsibly and in accordance with applicable laws and site terms.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
