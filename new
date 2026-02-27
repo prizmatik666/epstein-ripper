@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 #
 #     Prizm presents
-#   ▄████████    ▄███████▄    ▄████████  ▄█     ▄███████▄
-#  ███    ███   ███    ███   ███    ███ ███    ███    ███
-#  ███    █▀    ███    ███   ███    ███ ███▌   ███    ███
-# ▄███▄▄▄       ███    ███  ▄███▄▄▄▄██▀ ███▌   ███    ███
-#▀▀███▀▀▀     ▀█████████▀  ▀▀███▀▀▀▀▀   ███▌ ▀█████████▀
-#  ███    █▄    ███        ▀███████████ ███    ███
-#  ███    ███   ███ STEIN  - ███    ███ ███    ███ PER
-#  ██████████  ▄████▀        ███    ███ █▀    ▄████▀
-#                            ███    ███ version 2.1
+#   ΓûäΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûê    ΓûäΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûä    ΓûäΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûê  ΓûäΓûê     ΓûäΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûä
+#  ΓûêΓûêΓûê    ΓûêΓûêΓûê   ΓûêΓûêΓûê    ΓûêΓûêΓûê   ΓûêΓûêΓûê    ΓûêΓûêΓûê ΓûêΓûêΓûê    ΓûêΓûêΓûê    ΓûêΓûêΓûê
+#  ΓûêΓûêΓûê    ΓûêΓûÇ    ΓûêΓûêΓûê    ΓûêΓûêΓûê   ΓûêΓûêΓûê    ΓûêΓûêΓûê ΓûêΓûêΓûêΓûî   ΓûêΓûêΓûê    ΓûêΓûêΓûê
+# ΓûäΓûêΓûêΓûêΓûäΓûäΓûä       ΓûêΓûêΓûê    ΓûêΓûêΓûê  ΓûäΓûêΓûêΓûêΓûäΓûäΓûäΓûäΓûêΓûêΓûÇ ΓûêΓûêΓûêΓûî   ΓûêΓûêΓûê    ΓûêΓûêΓûê
+#ΓûÇΓûÇΓûêΓûêΓûêΓûÇΓûÇΓûÇ     ΓûÇΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûÇ  ΓûÇΓûÇΓûêΓûêΓûêΓûÇΓûÇΓûÇΓûÇΓûÇ   ΓûêΓûêΓûêΓûî ΓûÇΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûÇ
+#  ΓûêΓûêΓûê    ΓûêΓûä    ΓûêΓûêΓûê        ΓûÇΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûê ΓûêΓûêΓûê    ΓûêΓûêΓûê
+#  ΓûêΓûêΓûê    ΓûêΓûêΓûê   ΓûêΓûêΓûê STEIN  - ΓûêΓûêΓûê    ΓûêΓûêΓûê ΓûêΓûêΓûê    ΓûêΓûêΓûê PER
+#  ΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûê  ΓûäΓûêΓûêΓûêΓûêΓûÇ        ΓûêΓûêΓûê    ΓûêΓûêΓûê ΓûêΓûÇ    ΓûäΓûêΓûêΓûêΓûêΓûÇ
+#                            ΓûêΓûêΓûê    ΓûêΓûêΓûê version 2.2
 #                        A Prizmatik Underground Production
 # =========================================================
 # Epstein DOJ Dataset Tools
@@ -87,14 +87,15 @@ SLEEP_BETWEEN_PAGES = 0.5
 # If you want to ensure you most likely scanned every
 # pdf in a dataset- i suggest upping it higher to 300
 # for better confidence .
-MAX_PAGES_WITH_NO_NEW_PDFS = 30     # stop after N pages in a row yield no NEW pdfs
+MAX_PAGES_WITH_NO_NEW_PDFS = 300     # stop after N pages in a row yield no NEW pdfs
 MAX_PAGES_HARD_CAP = 200000          # safety valve to avoid infinite loops
 
 # Retry behavior (for real download failures; session-poison does NOT consume retries)
-MAX_DOWNLOAD_RETRIES = 5
+MAX_DOWNLOAD_RETRIES = 3
 
 # "Unicorn" PDFs: avoid Playwright resp.body() protocol limit by streaming
-UNICORN_SIZE_BYTES = 100 * 1024 * 1024  # 100MB threshold; 
+UNICORN_SIZE_BYTES = 100 * 1024 * 1024  # 100MB threshold; adjust if you want
+
 # =========================================
 
 

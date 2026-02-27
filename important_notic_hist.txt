@@ -1,8 +1,18 @@
 -------------------------------------------
 # ⚠️ IMPORTANT DATA INTEGRITY NOTICES ⚠️ #
 -------------------------------------------
+# ADDED: 2/27/2026
+----------------------------------------
+found a new error when the downloader runs into a big .pdf
+this one imparticular
+https://www.justice.gov/epstein/files/DataSet%209/EFTA00171107.pdf
+it's full of just pictures, ~512mb if i remember right. 
+caused an error of not being able to return a string that long
+so added checks for this and alternate download method for large files
+over 100mb. 
+-----------------------------------------
 # ADDED: 2/26/2026 UPGRADED VERSION OF
-# index_repair.py  use the new one
+ index_repair.py  use the new one
 -------------------------------------------
 it was flipping downloaded=true to false like it was supposed to
 but with problems it's ment to solve, it also needs to flip false to true when appropriate . This came about when i was working with making the new index_tools section of utilities and experimenting with converting .db files to .json , comparing them.

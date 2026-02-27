@@ -251,16 +251,18 @@ Designed for:
 
 ## Requirements
 
--   Python 3.9+
--   Playwright
--   Chromium browser (installed via Playwright)
+## Requirements
 
-```{=html}
+- Python 3.9+
+- Playwright
+- aiohttp
+- Chromium browser (installed via Playwright)
+
+```html
 <!-- -->
 ```
-    pip install playwright
+    pip install -r requirements.txt
     playwright install chromium
-
 ------------------------------------------------------------------------
 
 ## index_files/

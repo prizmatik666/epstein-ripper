@@ -2,18 +2,27 @@
 # epstein-ripper — Requirements
 # ============================================================
 #
-# Python version:
+# Python Version:
 #   Python 3.9 or newer is required.
 #
-# This project uses Playwright for browser automation.
+# This project uses Playwright for browser automation
+# and aiohttp for large-PDF streaming downloads.
+#
+# IMPORTANT:
 # Installing Playwright via pip DOES NOT install browser binaries.
 #
-# After installing requirements, you MUST also run:
+# After installing requirements, you MUST run:
 #
 #   playwright install chromium
 #
-# This downloads the Chromium browser used for authentication.
+# This downloads the Chromium browser used for DOJ authentication.
+#
+# Recommended install steps:
+#
+#   python3 -m pip install -r requirements.txt
+#   playwright install chromium
 #
 # ============================================================
 
 playwright>=1.40.0
+aiohttp>=3.9.0
