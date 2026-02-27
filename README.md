@@ -277,30 +277,28 @@ I'm working with doing scanning with a util that scans and uses a sqlte database
 using sql/db files for the download index in the ripper is not currently supported - but will probably add in that option later. 
 
 mostly i'm experimenting with:
-    - speed and reliability of the sql scan vs. the built in ripper -> .json scanner for making the index file.
-    - how the DOJ site behaves as far as serving duplicate file list pages in higher # page's in the various datasets
-        - data9 started having alot of trouble after page 1000
-          -db scanner couldnt break out of the 'same file list' loop
-          that was happening
-          - the built in ripper scan had the same problem but would eventually break out of a no-new streak. It had high value streaks: more than 100,200 no-new-pdf's in a row before breaking out and returning new filenames. 
-              -i ran my data9 scan with max no new @ 300. 
+- speed and reliability of the sql scan vs. the built in ripper -> .json scanner for making the index file.
+- how the DOJ site behaves as far as serving duplicate file list pages in higher # page's in the various datasets
+- data9 started having alot of trouble after page 1000
+- db scanner couldnt break out of the 'same file list' loop that was happening
+- the built in ripper scan had the same problem but would eventually break out of a no-new streak. It had high value   streaks: more than 100,200 no-new-pdf's in a row before breaking out and returning new filenames. 
+-i ran my data9 scan with max no new @ 300. 
+```
 [2026-02-25 21:58:57] [DS 9] No NEW PDFs on page 7990 (streak=300/300)
 [2026-02-25 21:59:00] [DS 9] Stopping scan: no new PDFs for 300 consecutive pages.
 [2026-02-25 21:59:14] === DATASET 9 COMPLETE ===
 [2026-02-25 21:59:58] ALL DATASETS COMPLETE 
-            - doj's pagination makes knowing if your dataset file list is complete, but with 300 as the end count for no-new , you can have a much higher confidence that you scanned everything.
+```
+- doj's pagination makes knowing if your dataset file list is complete, but with 300 as the end count for no-new , you can have a much higher confidence that you scanned everything.
   
-  I will be trying to find the fastest, most reliable, and above all ACURATE - way of indexing the file names for download. I thought it would be good to include those tools here now to make updates easier - and for others to play around with.
+I will be trying to find the fastest, most reliable, and above all ACURATE - way of indexing the file names for download. I thought it would be good to include those tools here now to make updates easier - and for others to play around with.
 
-  - index_tools contains:
-  - db_index.py -> the page scanner to build file index w/ database
-  - db_to_json.py -> converts a db_index scan file into a ripper
-      useable .json for downloading
-  - dupe_check.py -> checks a .json index for duplicate entries
-  - dupe_index.py -> duplicates a .json index and flips all download=
-      values to false - making it into a fresh runable copy to be shared or freshly ran for download.
-          - will make it useable on db files when db functionality is
-           adopted in the main program also
+- index_tools contains:
+- db_index.py -> the page scanner to build file index w/ database
+- db_to_json.py -> converts a db_index scan file into a ripper useable .json for downloading
+- dupe_check.py -> checks a .json index for duplicate entries
+- dupe_index.py -> duplicates a .json index and flips all download= values to false - making it into a fresh runable copy to be shared or freshly ran for download.
+ - will make it useable on db files when db functionality is adopted in the main program also
 
 ## Support
 ------------------------------------------------------------------------
