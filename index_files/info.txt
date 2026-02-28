@@ -1,0 +1,14 @@
+[JSON] index_data9.json | size=75.67 MB | PDF_ENTRIES=216408
+[JSON] index_data10_from_db.json | size=163.97 MB | PDF_ENTRIES=468631
+[JSON] index_data11_from_db.json | size=111.47 MB | PDF_ENTRIES=318636
+[JSON] index_data12_from_db.json | size=36.18 KB | PDF_ENTRIES=101
+
+index_data9 - made doing long scan w/ ripper (300 no-new streak)
+index_data10 - DBscan converted to .json
+index_data11 - DBscan converted to .json
+index_data12 - Dbscan converted to .json
+    - data12 - on site viewing confirmed low file count
+
+unzip and place the .json file in corresponding data#/ dir
+select 'download' for the mode in ripper
+it will use the index for downloading, no scan or sync needed

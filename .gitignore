@@ -1,0 +1,6 @@
+
+# Large index JSONs (store zipped)
+index_files/*.json
+
+# Large index JSONs (store zipped)
+index_files/*.json
