@@ -4,23 +4,28 @@ Reliable, resumable archival downloader and validator for DOJ Epstein
 disclosure datasets.
 
 ------------------------------------------------------------------------
+
 HANDS-FREE DOWNLOAD VERSION AVAILABLE!! [ 03/02/2026 ]
 # NOW WITH FULLY AUTOMATED AUTH-VERIFICATION! #
 - auto_ep_rip.py is the new version that automates all the authorization checks that happen during the process. "Robot" and "age" buttons . Select your dataset, download, and it'll take care of the rest!
 
 DETAILS:
-#=======================================================#
+
 # Hands-free upgrades:
-# - Auto-click abuse-deterrent "I am not a robot" button (reauth gate)
-# - Auto-click age gate YES (#age-button-yes)
-# - No more "Press ENTER..." pauses for session refresh
-# - Waits until dataset list is visible, then resumes automatically
-# - Adds configurable sleeps between auth stages (stability)
-# - Adds session warmup check before closing auth window (stability)
-# - Hardens safe_json_save to avoid .tmp -> .json FileNotFound crash
-#=======================================================#
-Just incase anyone has issue's with the automated version - the last working epstein_ripper.py is still here. That one requires button clicks and interaction during auth/continue screens.
+ - Auto-click abuse-deterrent "I am not a robot" button (reauth gate)
+ - Auto-click age gate YES (#age-button-yes)
+ - No more "Press ENTER..." pauses for session refresh
+ - Waits until dataset list is visible, then resumes automatically
+ - Adds configurable sleeps between auth stages (stability)
+ - Adds session warmup check before closing auth window (stability)
+
+Just incase anyone has issue's with the automated version - the last working epstein_ripper.py is still here. 
 -----------------------------------------------------
+PLANNED UPDATES 
+---------------
+[ 3/2/2026 ] during this week i plan to update the auto ripper's download engine's error handling. especially timeout's and connection resets from server errors - so they retry instead of fatal error. Other than that everything seems to be working great.
+
+
 
 
 
