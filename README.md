@@ -6,9 +6,31 @@ disclosure datasets.
 ------------------------------------------------------------------------
 
 HANDS-FREE DOWNLOAD VERSION AVAILABLE!! [ 03/02/2026 ]
-# NOW WITH FULLY AUTOMATED AUTH-VERIFICATION! #
-- auto_ep_rip.py is the new version that automates all the authorization checks that happen during the process. "Robot" and "age" buttons . Select your dataset, download, and it'll take care of the rest!
+ NOW WITH FULLY AUTOMATED AUTH-VERIFICATION! - auto_ep_rip.py is the new version that automates all the authorization checks that happen during the process. "Robot" and "age" buttons . Select your dataset, download, and it'll take care of the rest!
 
+Hands-free upgrades:
+ - Auto-click abuse-deterrent "I am not a robot" button (reauth gate)
+ - Auto-click age gate YES (#age-button-yes)
+ - No more "Press ENTER..." pauses for session refresh
+ - Waits until dataset list is visible, then resumes automatically
+ - Adds configurable sleeps between auth stages (stability)
+ - Hardens safe_json_save to avoid .tmp -> .json FileNotFound crash
+
+ Patch vNext:
+ - Prevent infinite loops on bad PDFs / poison: per-file poison cap + immediate skip for clearly bad payloads
+ - bad_files.log audit trail for skipped/bad-source files
+ - Retryable network error handling (ETIMEDOUT/ECONNRESET/socket hang up/etc) with backoff
+
+ Patch (session polish):
+ - Bad-file messaging: "BAD_SERVER_FILE (PDF endpoint returned non-PDF bytes)"
+ - Ctrl+C / shutdown session summary stats (downloaded, bad/skips, net errors, etc.)
+ - Warmup REMOVED: replaced with clean, confidence-forward initialization + settle delay
+
+ Patch (poison retry fix):
+ - After session refresh/re-auth, ACTUALLY retry the same file before moving on
+   (inner per-file loop; refresh triggers a retry of the current filename)
+
+<<<<<<< HEAD
 DETAILS:
 
 # Hands-free upgrades:
@@ -20,12 +42,13 @@ DETAILS:
  - Adds session warmup check before closing auth window (stability)
 
 Just incase anyone has issue's with the automated version - the last working epstein_ripper.py is still here. 
+=======
+Just incase anyone has issue's with the automated version - the last working epstein_ripper.py is still here. That one requires button clicks and interaction during auth/continue screens.
+>>>>>>> 282f309 (improved error handling bad-pdf-file infinite loop)
 -----------------------------------------------------
 PLANNED UPDATES 
 ---------------
 [ 3/2/2026 ] during this week i plan to update the auto ripper's download engine's error handling. especially timeout's and connection resets from server errors - so they retry instead of fatal error. Other than that everything seems to be working great.
-
-
 
 
 

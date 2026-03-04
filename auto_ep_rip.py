@@ -9,7 +9,7 @@
 #  ███    █▄    ███        ▀███████████ ███    ███
 #  ███    ███   ███ STEIN  - ███    ███ ███    ███ PER
 #  ██████████  ▄████▀        ███    ███ █▀    ▄████▀
-#   [ AUTOMATIC ]                       ███    ███ version 3
+#   [ AUTOMATIC ]                       ███    ███ version 3.1
 #                        A Prizmatik Underground Production
 # ==========================================================
 # Epstein DOJ Dataset Tools
@@ -22,7 +22,31 @@
 # Email: prizmatikug@gmail.com
 #
 #=======================================================#
-# UPDATED VERSION: 3/2/2026 [auto_ep_rip.py]              #
+# [ 3/03/2026 ] UPDATED VERSION                         #
+#_______________________________________________________#
+# Hands-free upgrades:
+# - Auto-click abuse-deterrent "I am not a robot" button (reauth gate)
+# - Auto-click age gate YES (#age-button-yes)
+# - No more "Press ENTER..." pauses for session refresh
+# - Waits until dataset list is visible, then resumes automatically
+# - Adds configurable sleeps between auth stages (stability)
+#
+# Patch vNext:
+# - Prevent infinite loops on bad PDFs / poison: per-file poison cap + immediate skip for clearly bad payloads
+# - bad_files.log audit trail for skipped/bad-source files
+# - Retryable network error handling (ETIMEDOUT/ECONNRESET/socket hang up/etc) with backoff
+#
+# Patch (session polish):
+# - Bad-file messaging: "BAD_SERVER_FILE (PDF endpoint returned non-PDF bytes)"
+# - Ctrl+C / shutdown session summary stats (downloaded, bad/skips, net errors, etc.)
+# - Warmup REMOVED: replaced with clean, confidence-forward initialization + settle delay
+#
+# Patch (poison retry fix):
+# - After session refresh/re-auth, ACTUALLY retry the same file before moving on
+#   (inner per-file loop; refresh triggers a retry of the current filename)
+#=======================================================#
+#=======================================================#
+# UPDATED VERSION: 3/2/2026 [auto_ep_rip.py]            #
 #_______________________________________________________#
 # automated the page-context approval, age button click,#
 # not-robot button checks, session poison re-auth. :) :)#
@@ -50,6 +74,17 @@
 # BUT- a 404 error during download would suggest files that DOJ removed
 # since your datasets index file was built - sneaky sneaky
 #-------------------------------------------------------#
+#!/usr/bin/env python3
+# Epstein DOJ Dataset Tools
+#
+# Author: Prizm (Prizmatik Underground)
+# Repository:
+# https://github.com/prizmatik666/epstein-ripper
+#
+# Support Development:
+# PayPal: https://www.paypal.com/ncp/payment/VVDAXZGKPQZKW
+# Email: prizmatikug@gmail.com
+#==========================================================#
 import os
 import re
 import json
@@ -58,6 +93,7 @@ import hashlib
 import argparse
 import asyncio
 import sys
+import random
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
 from typing import Dict, Any, List, Tuple, Optional
@@ -70,7 +106,7 @@ from playwright.async_api import TimeoutError as PWTimeoutError
 
 BASE_SITE = "https://www.justice.gov"
 
-# DOJ currently has datasets 1ΓÇô12 (adjust later if they add more)
+# DOJ currently has datasets 1-12 (adjust later if they add more)
 DATASET_RANGE = range(1, 13)
 
 DATASETS = {
@@ -84,17 +120,18 @@ DATASETS = {
 }
 
 LOG_FILE = "download.log"
+BAD_FILES_LOG = "bad_files.log"
 
 # Throttling
-SLEEP_BETWEEN_DOWNLOADS = 0.75
+SLEEP_BETWEEN_DOWNLOADS = 0.05
 SLEEP_BETWEEN_PAGES = 0.5
 
 # Stop conditions
-MAX_PAGES_WITH_NO_NEW_PDFS = 30
+MAX_PAGES_WITH_NO_NEW_PDFS = 300
 MAX_PAGES_HARD_CAP = 200000
 
-# Retry behavior (for real download failures; session-poison does NOT consume retries)
-MAX_DOWNLOAD_RETRIES = 35
+# Retry behavior (for real download failures; poison has its own counters)
+MAX_DOWNLOAD_RETRIES = 3
 
 # "Unicorn" PDFs: avoid Playwright resp.body() protocol limit by streaming
 UNICORN_SIZE_BYTES = 100 * 1024 * 1024  # 100MB threshold
@@ -114,27 +151,107 @@ DATASET_LIST_PDF_LINKS = "div.block-usdoj-external-files-block a[href$='.pdf']"
 # How long to wait for the dataset list after opening auth page
 AUTH_WAIT_SECONDS = 600  # 10 minutes: allows manual captcha if it appears
 
-# --- Auth stability sleeps (your requested staging) ---
-# spawn browser / sleep / button / sleep / list detect / sleep -> start download
+# --- Auth stability sleeps ---
 AUTH_SLEEP_AFTER_GOTO = 1.5
 AUTH_SLEEP_AFTER_ROBOT_CLICK = 1.0
 AUTH_SLEEP_AFTER_AGE_CLICK = 0.6
 AUTH_SLEEP_AFTER_LIST_VISIBLE = 0.8
 
-# --- Warmup / keep-window logic ---
-# Sometimes closing the auth page too early breaks first downloads.
-# We'll "warm up" the session via context.request to verify we can see PDF links,
-# and optionally keep the window open briefly after auth.
-AUTH_WARMUP_ENABLED = True
-AUTH_WARMUP_RETRIES = 3
-AUTH_WARMUP_SLEEP = 0.75
+# --- Initialization settle delay (replaces warmup) ---
+# This gives the session/cookies a moment to fully lock in before downloads begin.
+AUTH_SESSION_SETTLE_SECONDS = 1.0
 
-# Keep the auth page open for a short time after warmup (helps some flaky sessions).
-KEEP_AUTH_PAGE_OPEN_SECONDS = 2.0  # set 0 to disable
-# If True, we will close the auth page automatically after warmup + keep-open delay.
+# Keep the auth page open for a short time after list is visible (helps some flaky sessions).
+KEEP_AUTH_PAGE_OPEN_SECONDS = 5.0  # set 0 to disable
+# If True, we will close the auth page automatically after settle + keep-open delay.
 CLOSE_AUTH_PAGE_AFTER_AUTH = True
 
+# --- Poison handling / audit ---
+POISON_HITS_BEFORE_SKIP = 3          # N poison hits => skip + bad_files.log
+POISON_REFRESHES_BEFORE_SKIP = 2     # refresh context at most this many times for same file
+BAD_PDF_IMMEDIATE_SKIP = True        # if clearly bad payload (non-PDF, non-HTML), skip immediately
+
+# --- Backoff for retryable network failures ---
+RETRY_BACKOFF_BASE = 0.8
+RETRY_BACKOFF_CAP = 15.0
+RETRY_BACKOFF_JITTER = 0.35
+
 # =========================================
+
+SESSION = {
+    "start_ts": datetime.now().isoformat(timespec="seconds"),
+    "downloaded_ok": 0,
+    "marked_downloaded_existing": 0,
+    "skipped_bad_server_file": 0,
+    "skipped_poison_hit_limit": 0,
+    "skipped_poison_refresh_limit": 0,
+    "skipped_max_retries": 0,
+    "retryable_net_errors": 0,
+    "http_errors": 0,
+    "other_errors": 0,
+    "datasets": {},  # ds -> dict
+}
+
+
+def _ds_stats(ds: int) -> Dict[str, int]:
+    d = SESSION["datasets"].setdefault(ds, {
+        "downloaded_ok": 0,
+        "marked_downloaded_existing": 0,
+        "skipped_bad_server_file": 0,
+        "skipped_poison_hit_limit": 0,
+        "skipped_poison_refresh_limit": 0,
+        "skipped_max_retries": 0,
+        "retryable_net_errors": 0,
+        "http_errors": 0,
+        "other_errors": 0,
+    })
+    return d
+
+
+def _append_to_logfile(lines: List[str]) -> None:
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            for ln in lines:
+                f.write(ln + "\n")
+    except Exception:
+        pass
+
+
+def print_session_summary() -> None:
+    end_ts = datetime.now().isoformat(timespec="seconds")
+    lines = []
+    lines.append("=" * 78)
+    lines.append(f"SESSION SUMMARY  start={SESSION['start_ts']}  end={end_ts}")
+    lines.append("-" * 78)
+    lines.append(f"Downloaded OK:                 {SESSION['downloaded_ok']}")
+    lines.append(f"Marked downloaded (pre-exist): {SESSION['marked_downloaded_existing']}")
+    lines.append(f"Skipped (bad server file):     {SESSION['skipped_bad_server_file']}")
+    lines.append(f"Skipped (poison hit limit):    {SESSION['skipped_poison_hit_limit']}")
+    lines.append(f"Skipped (poison refresh limit):{SESSION['skipped_poison_refresh_limit']}")
+    lines.append(f"Skipped (max retries):         {SESSION['skipped_max_retries']}")
+    lines.append(f"Retryable net errors:          {SESSION['retryable_net_errors']}")
+    lines.append(f"HTTP errors:                   {SESSION['http_errors']}")
+    lines.append(f"Other errors:                  {SESSION['other_errors']}")
+
+    if SESSION["datasets"]:
+        lines.append("")
+        lines.append("Per-dataset:")
+        for ds in sorted(SESSION["datasets"].keys()):
+            s = SESSION["datasets"][ds]
+            lines.append(
+                f"  DS{ds}: ok={s['downloaded_ok']} exist={s['marked_downloaded_existing']} "
+                f"bad={s['skipped_bad_server_file']} poison={s['skipped_poison_hit_limit']} "
+                f"refresh_limit={s['skipped_poison_refresh_limit']} max={s['skipped_max_retries']} "
+                f"net={s['retryable_net_errors']} http={s['http_errors']} other={s['other_errors']}"
+            )
+
+    lines.append("=" * 78)
+
+    # Print to terminal
+    print("\n" + "\n".join(lines) + "\n")
+
+    # Also append to download.log (without timestamps; it's a summary block)
+    _append_to_logfile([""] + lines + [""])
 
 
 def log(msg: str) -> None:
@@ -143,6 +260,69 @@ def log(msg: str) -> None:
     print(line)
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(line + "\n")
+
+
+def log_bad_file(dataset_id: int, filename: str, url: str, referer: str, reason: str, extra: str = "") -> None:
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = (
+        f"[{ts}] DS={dataset_id} FILE={filename} REASON={reason} "
+        f"URL={url} REFERER={referer}"
+    )
+    if extra:
+        line += f" EXTRA={extra}"
+    print(line)
+    with open(BAD_FILES_LOG, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
+
+
+def is_retryable_playwright_error(msg: str) -> bool:
+    m = (msg or "").lower()
+    retry_signals = [
+        "etimedout",
+        "econnreset",
+        "socket hang up",
+        "eai_again",
+        "net::err_connection_reset",
+        "net::err_connection_closed",
+        "net::err_timed_out",
+        "timed out",
+        "read etimedout",
+        "connection terminated",
+        "connection closed",
+        "temporary failure in name resolution",
+        "name resolution",
+    ]
+    return any(s in m for s in retry_signals)
+
+
+def backoff_sleep_seconds(attempt_num: int) -> float:
+    base = min(RETRY_BACKOFF_CAP, RETRY_BACKOFF_BASE * (2 ** max(0, attempt_num - 1)))
+    jitter = base * random.uniform(0.0, RETRY_BACKOFF_JITTER)
+    return base + jitter
+
+
+def classify_non_pdf_bytes(head16: bytes) -> str:
+    """
+    Returns:
+      'HTML_GATE'   -> looks like HTML / gate page
+      'BAD_PAYLOAD' -> not html, not PDF magic (likely corrupt or wrong content)
+    """
+    h = (head16 or b"").lstrip()
+    if h.startswith(b"\xef\xbb\xbf"):
+        h = h[3:].lstrip()
+    hl = h.lower()
+    if (
+        hl.startswith(b"<!doctype") or
+        hl.startswith(b"<html") or
+        hl.startswith(b"<head") or
+        hl.startswith(b"<script") or
+        hl.startswith(b"<!--") or
+        hl.startswith(b"<meta") or
+        hl.startswith(b"<title") or
+        hl.startswith(b"<?xml")
+    ):
+        return "HTML_GATE"
+    return "BAD_PAYLOAD"
 
 
 def sha256_file(path: str, chunk_size: int = 1024 * 1024) -> str:
@@ -173,23 +353,12 @@ def safe_json_load(path: str) -> Dict[str, Any]:
 
 
 def safe_json_save(path: str, data: Dict[str, Any]) -> None:
-    """
-    Atomic-ish JSON save.
-
-    Hardened to avoid rare crash:
-      FileNotFoundError: '...json.tmp' -> '...json'
-
-    Causes we defend against:
-      - directory missing (ensure it exists)
-      - transient FS weirdness (retry replace a couple times)
-    """
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
 
     tmp = path + ".tmp"
 
-    # Write tmp
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, sort_keys=True)
         f.flush()
@@ -198,13 +367,11 @@ def safe_json_save(path: str, data: Dict[str, Any]) -> None:
         except Exception:
             pass
 
-    # Replace with small retry loop (in case something external deletes tmp)
     for attempt in range(3):
         try:
             os.replace(tmp, path)
             return
         except FileNotFoundError:
-            # tmp missing at replace time; try to re-write once
             if attempt < 2:
                 with open(tmp, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, sort_keys=True)
@@ -287,18 +454,12 @@ def ask_mode_interactive() -> str:
 
 
 async def ensure_robot_verified(page, dataset_id: int) -> bool:
-    """
-    Auto-click DOJ abuse-deterrent robot page if present.
-    Safe to call repeatedly.
-    Returns True if it clicked.
-    """
     try:
         btn = page.locator(ROBOT_BTN).first
         if await btn.is_visible(timeout=250):
             log(f"[DS {dataset_id}] [auth] Robot gate detected -> clicking 'I am not a robot'")
             await btn.click(timeout=8000)
             await asyncio.sleep(AUTH_SLEEP_AFTER_ROBOT_CLICK)
-            # After reauth(), page reloads. Give it a moment.
             try:
                 await page.wait_for_load_state("domcontentloaded", timeout=20000)
             except PWTimeoutError:
@@ -312,11 +473,6 @@ async def ensure_robot_verified(page, dataset_id: int) -> bool:
 
 
 async def ensure_age_verified(page, dataset_id: int) -> bool:
-    """
-    Auto-click DOJ age gate Yes if present.
-    Safe to call repeatedly.
-    Returns True if it clicked.
-    """
     try:
         gate = page.locator(AGE_GATE_BLOCK).first
         if await gate.is_visible(timeout=250):
@@ -332,24 +488,17 @@ async def ensure_age_verified(page, dataset_id: int) -> bool:
 
 
 async def wait_for_dataset_list(page, dataset_id: int, timeout_s: int = AUTH_WAIT_SECONDS) -> None:
-    """
-    Wait until the dataset file list is visible (PDF links appear).
-    Handles BOTH:
-      - robot gate page (reauth button)
-      - age verify gate
-    """
-    log(f"[DS {dataset_id}] Waiting for dataset list to become visible (hands-free)...")
+    log(f"[DS {dataset_id}] [auth] Validating access and loading dataset list...")
     deadline = time.time() + timeout_s
 
     while True:
-        # Clear gates if they appear
         await ensure_robot_verified(page, dataset_id=dataset_id)
         await ensure_age_verified(page, dataset_id=dataset_id)
 
         try:
             count = await page.locator(DATASET_LIST_PDF_LINKS).count()
             if count and count > 0:
-                log(f"[DS {dataset_id}] Dataset list visible (pdf links found: {count})")
+                log(f"[DS {dataset_id}] [auth] Dataset list ready (pdf links found: {count})")
                 await asyncio.sleep(AUTH_SLEEP_AFTER_LIST_VISIBLE)
                 return
         except Exception:
@@ -364,77 +513,31 @@ async def wait_for_dataset_list(page, dataset_id: int, timeout_s: int = AUTH_WAI
         await asyncio.sleep(0.5)
 
 
-async def warmup_session(context, first_page_url: str, dataset_id: int) -> None:
-    """
-    Verify the auth session is actually usable BEFORE we proceed/close auth window.
-    We do a context.request.get() and ensure it contains PDF links.
-    """
-    if not AUTH_WARMUP_ENABLED:
-        return
-
-    for attempt in range(1, AUTH_WARMUP_RETRIES + 1):
-        try:
-            r = await context.request.get(first_page_url, timeout=60000, headers={"Accept": "text/html,*/*"})
-            if r.status != 200:
-                log(f"[DS {dataset_id}] [auth] Warmup attempt {attempt}: HTTP {r.status}")
-                await asyncio.sleep(AUTH_WARMUP_SLEEP)
-                continue
-
-            txt = await r.text()
-            # Cheap-but-effective: look for DOJ epstein file link pattern.
-            if ("/epstein/files/" in txt) and (".pdf" in txt):
-                log(f"[DS {dataset_id}] [auth] Warmup OK (session can see PDF links)")
-                return
-
-            # If we got robot/age gate HTML, we'll just retry after a short delay.
-            log(f"[DS {dataset_id}] [auth] Warmup attempt {attempt}: still gated (no PDF links in HTML)")
-            await asyncio.sleep(AUTH_WARMUP_SLEEP)
-            continue
-
-        except Exception as e:
-            log(f"[DS {dataset_id}] [auth] Warmup attempt {attempt}: ERROR {type(e).__name__}: {e}")
-            await asyncio.sleep(AUTH_WARMUP_SLEEP)
-
-    log(f"[DS {dataset_id}] [auth] Warmup did not confirm PDF visibility, continuing anyway (may still work).")
-
-
 async def create_fresh_context(browser, first_page_url: str, dataset_id: int):
-    """
-    Hands-free auth context:
-      - opens page
-      - staged sleeps (stability)
-      - auto-clicks robot gate if present
-      - auto-clicks age gate YES if present
-      - waits for dataset list to appear
-      - warms up session via context.request
-      - (optional) keeps auth page open briefly
-      - (optional) closes auth page
-      - returns (context, auth_page_or_none)
-    """
     context = await browser.new_context()
     page = await context.new_page()
 
-    log(f"[DS {dataset_id}] NEW CONTEXT ΓÇö opening dataset page for DOJ auth")
+    log(f"[DS {dataset_id}] NEW CONTEXT — starting DOJ session...")
     await page.goto(first_page_url, wait_until="domcontentloaded")
     await asyncio.sleep(AUTH_SLEEP_AFTER_GOTO)
 
-    # Clear gates + wait for list
     await ensure_robot_verified(page, dataset_id=dataset_id)
     await ensure_age_verified(page, dataset_id=dataset_id)
     await wait_for_dataset_list(page, dataset_id=dataset_id, timeout_s=AUTH_WAIT_SECONDS)
 
-    # Warmup the session so we don't close too early and break first downloads
-    await warmup_session(context, first_page_url=first_page_url, dataset_id=dataset_id)
+    if AUTH_SESSION_SETTLE_SECONDS and AUTH_SESSION_SETTLE_SECONDS > 0:
+        log(f"[DS {dataset_id}] [auth] Session initialized — settling ({AUTH_SESSION_SETTLE_SECONDS:.1f}s)")
+        await asyncio.sleep(AUTH_SESSION_SETTLE_SECONDS)
 
     if KEEP_AUTH_PAGE_OPEN_SECONDS and KEEP_AUTH_PAGE_OPEN_SECONDS > 0:
-        log(f"[DS {dataset_id}] [auth] Keeping auth window open for {KEEP_AUTH_PAGE_OPEN_SECONDS:.1f}s (stability)")
+        log(f"[DS {dataset_id}] [auth] Holding auth window open ({KEEP_AUTH_PAGE_OPEN_SECONDS:.1f}s)")
         await asyncio.sleep(KEEP_AUTH_PAGE_OPEN_SECONDS)
 
     if CLOSE_AUTH_PAGE_AFTER_AUTH:
         try:
             await page.close()
             page = None
-            log(f"[DS {dataset_id}] [auth] Auth window closed (session should be ready)")
+            log(f"[DS {dataset_id}] [auth] Session ready — proceeding to work queue")
         except Exception:
             pass
 
@@ -476,14 +579,14 @@ def init_index_structure(idx: Dict[str, Any], dataset_id: int) -> Dict[str, Any]
                 "created_at": datetime.now().isoformat(timespec="seconds"),
                 "last_scan_at": None,
                 "last_scan_page": 0,
-                "version": 2,
+                "version": 3,
             },
             "files": {}
         }
     idx.setdefault("meta", {})
     idx.setdefault("files", {})
     idx["meta"].setdefault("dataset", dataset_id)
-    idx["meta"].setdefault("version", 2)
+    idx["meta"].setdefault("version", 3)
     idx["meta"].setdefault("created_at", datetime.now().isoformat(timespec="seconds"))
     idx["meta"].setdefault("last_scan_at", None)
     idx["meta"].setdefault("last_scan_page", 0)
@@ -506,6 +609,11 @@ def upsert_index_entry(idx: Dict[str, Any], filename: str, url: str, page_num: i
             "bytes": None,
             "attempts": 0,
             "last_error": None,
+
+            "poison_hits": 0,
+            "poison_refreshes": 0,
+            "skipped": False,
+            "skip_reason": None,
         }
         return True
 
@@ -524,7 +632,9 @@ def needs_download(out_path: str, entry: Dict[str, Any]) -> bool:
 
 
 def bytes_look_like_pdf(b: bytes) -> bool:
-    return b.startswith(b"%PDF-")
+    if not b:
+        return False
+    return b.lstrip().startswith(b"%PDF-")
 
 
 def loud_session_poison_alert(dataset_id: int, filename: str):
@@ -589,7 +699,8 @@ async def stream_download_via_aiohttp(
                             os.remove(part_path)
                     except Exception:
                         pass
-                    return False, "SESSION_POISON"
+                    kind = classify_non_pdf_bytes(first)
+                    return False, ("SESSION_POISON_HTML" if kind == "HTML_GATE" else "SESSION_POISON_BAD")
 
                 with open(part_path, "wb") as f:
                     f.write(first)
@@ -628,9 +739,15 @@ async def download_one(context, pdf_url: str, referer: str, out_path: str) -> Tu
         except Exception:
             pass
 
-    resp = await fetch_pdf(context, pdf_url, referer)
-    status = resp.status
+    try:
+        resp = await fetch_pdf(context, pdf_url, referer)
+    except Exception as e:
+        msg = str(e)
+        if is_retryable_playwright_error(msg):
+            return False, f"RETRYABLE_NET: {msg}"
+        return False, f"PLAYWRIGHT_ERROR: {msg}"
 
+    status = resp.status
     if status != 200:
         return False, f"HTTP {status}"
 
@@ -649,6 +766,8 @@ async def download_one(context, pdf_url: str, referer: str, out_path: str) -> Tu
         msg = str(e)
         if "Cannot create a string longer than" in msg:
             return await stream_download_via_aiohttp(context, pdf_url, referer, out_path, part_path)
+        if is_retryable_playwright_error(msg):
+            return False, f"RETRYABLE_NET: {msg}"
         return False, f"PLAYWRIGHT_ERROR: {msg}"
 
     head = body[:16] if body else b""
@@ -658,7 +777,8 @@ async def download_one(context, pdf_url: str, referer: str, out_path: str) -> Tu
                 os.remove(part_path)
         except Exception:
             pass
-        return False, "SESSION_POISON"
+        kind = classify_non_pdf_bytes(head)
+        return False, ("SESSION_POISON_HTML" if kind == "HTML_GATE" else "SESSION_POISON_BAD")
 
     with open(part_path, "wb") as f:
         f.write(body)
@@ -693,11 +813,9 @@ async def scan_dataset_pages(
         log(f"[DS {dataset_id}] Scanning page {page_num}")
         await page.goto(page_url, wait_until="domcontentloaded")
 
-        # Gates can randomly return; clear if they do.
         await ensure_robot_verified(page, dataset_id=dataset_id)
         await ensure_age_verified(page, dataset_id=dataset_id)
 
-        # Let links render
         try:
             await page.wait_for_load_state("networkidle", timeout=20000)
         except PWTimeoutError:
@@ -769,6 +887,9 @@ async def download_missing_from_index(
         if extract_file_num(filename) is None:
             continue
 
+        if entry.get("skipped"):
+            continue
+
         out_path = os.path.join(out_dir, filename)
 
         if os.path.exists(out_path) and not entry.get("downloaded"):
@@ -778,64 +899,176 @@ async def download_missing_from_index(
                 entry["bytes"] = os.path.getsize(out_path)
             except Exception:
                 pass
+            SESSION["marked_downloaded_existing"] += 1
+            _ds_stats(dataset_id)["marked_downloaded_existing"] += 1
             safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
             continue
 
         if not needs_download(out_path, entry):
             continue
 
+        # If attempts already exhausted, skip immediately (and audit)
         if entry.get("attempts", 0) >= MAX_DOWNLOAD_RETRIES:
+            entry["skipped"] = True
+            entry["skip_reason"] = "MAX_RETRIES_EXHAUSTED"
+            entry["last_error"] = entry["skip_reason"]
+            SESSION["skipped_max_retries"] += 1
+            _ds_stats(dataset_id)["skipped_max_retries"] += 1
+
+            pdf_url = entry.get("url", "")
+            page_num = entry.get("page", "?")
+            referer = DATASETS[dataset_id]["base_url"].format(page_num if isinstance(page_num, int) and page_num >= 1 else 1)
+
+            log(f"[DS {dataset_id}] MAX RETRIES EXHAUSTED -> SKIPPING {filename}")
+            log_bad_file(dataset_id, filename, pdf_url, referer, entry["skip_reason"], extra=f"attempts={entry.get('attempts', 0)}")
+            safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
             continue
 
         pdf_url = entry["url"]
         page_num = entry.get("page", "?")
         referer = DATASETS[dataset_id]["base_url"].format(page_num if isinstance(page_num, int) and page_num >= 1 else 1)
 
-        log(f"[DS {dataset_id}] DOWNLOAD {filename}")
+        # ---------------------------------------------------------------------
+        # FIX: per-file loop so a session refresh actually retries THIS filename
+        # ---------------------------------------------------------------------
+        while True:
+            # Respect max retries during the loop too
+            if entry.get("attempts", 0) >= MAX_DOWNLOAD_RETRIES:
+                entry["skipped"] = True
+                entry["skip_reason"] = "MAX_RETRIES_EXHAUSTED"
+                entry["last_error"] = entry["skip_reason"]
+                SESSION["skipped_max_retries"] += 1
+                _ds_stats(dataset_id)["skipped_max_retries"] += 1
 
-        ok, err = await download_one(context, pdf_url, referer, out_path)
+                log(f"[DS {dataset_id}] MAX RETRIES EXHAUSTED -> SKIPPING {filename}")
+                log_bad_file(dataset_id, filename, pdf_url, referer, entry["skip_reason"], extra=f"attempts={entry.get('attempts', 0)}")
+                safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
+                break  # move to next file
 
-        if ok:
+            log(f"[DS {dataset_id}] DOWNLOAD {filename}")
+            ok, err = await download_one(context, pdf_url, referer, out_path)
+
+            if ok:
+                entry["attempts"] = int(entry.get("attempts", 0)) + 1
+                entry["downloaded"] = True
+                entry["downloaded_at"] = datetime.now().isoformat(timespec="seconds")
+                entry["last_error"] = None
+                entry["poison_hits"] = 0
+                entry["poison_refreshes"] = 0
+
+                try:
+                    entry["bytes"] = os.path.getsize(out_path)
+                except Exception:
+                    pass
+
+                completed += 1
+                SESSION["downloaded_ok"] += 1
+                _ds_stats(dataset_id)["downloaded_ok"] += 1
+
+                log(f"[DS {dataset_id}] DONE ({completed}) {filename}")
+                safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
+                await asyncio.sleep(SLEEP_BETWEEN_DOWNLOADS)
+                break  # move to next file
+
+            # --- Poison handling ---
+            if err in ("SESSION_POISON_HTML", "SESSION_POISON_BAD"):
+                poison_hits = int(entry.get("poison_hits", 0)) + 1
+                entry["poison_hits"] = poison_hits
+
+                if err == "SESSION_POISON_BAD" and BAD_PDF_IMMEDIATE_SKIP:
+                    entry["skipped"] = True
+                    entry["skip_reason"] = "BAD_SERVER_FILE (PDF endpoint returned non-PDF bytes)"
+                    entry["last_error"] = entry["skip_reason"]
+
+                    SESSION["skipped_bad_server_file"] += 1
+                    _ds_stats(dataset_id)["skipped_bad_server_file"] += 1
+
+                    log(f"[DS {dataset_id}] BAD SERVER FILE -> SKIPPING {filename}")
+                    log_bad_file(dataset_id, filename, pdf_url, referer, entry["skip_reason"], extra=f"poison_hits={poison_hits}")
+                    safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
+                    await asyncio.sleep(SLEEP_BETWEEN_DOWNLOADS)
+                    break  # move to next file
+
+                # HTML gate / poison
+                entry["last_error"] = f"{err} (non-PDF response)"
+                log(f"[DS {dataset_id}] SESSION POISON ({err}) while downloading {filename} (hit {poison_hits}/{POISON_HITS_BEFORE_SKIP})")
+                safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
+
+                if poison_hits >= POISON_HITS_BEFORE_SKIP:
+                    entry["skipped"] = True
+                    entry["skip_reason"] = f"REPEATED_SESSION_POISON ({err})"
+                    entry["last_error"] = entry["skip_reason"]
+
+                    SESSION["skipped_poison_hit_limit"] += 1
+                    _ds_stats(dataset_id)["skipped_poison_hit_limit"] += 1
+
+                    log(f"[DS {dataset_id}] POISON HIT LIMIT -> SKIPPING {filename}")
+                    log_bad_file(dataset_id, filename, pdf_url, referer, entry["skip_reason"], extra=f"poison_hits={poison_hits}")
+                    safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
+                    await asyncio.sleep(SLEEP_BETWEEN_DOWNLOADS)
+                    break  # move to next file
+
+                refreshes = int(entry.get("poison_refreshes", 0))
+                if refreshes >= POISON_REFRESHES_BEFORE_SKIP:
+                    entry["skipped"] = True
+                    entry["skip_reason"] = f"POISON_REFRESH_LIMIT ({err})"
+                    entry["last_error"] = entry["skip_reason"]
+
+                    SESSION["skipped_poison_refresh_limit"] += 1
+                    _ds_stats(dataset_id)["skipped_poison_refresh_limit"] += 1
+
+                    log(f"[DS {dataset_id}] POISON REFRESH LIMIT -> SKIPPING {filename}")
+                    log_bad_file(dataset_id, filename, pdf_url, referer, entry["skip_reason"], extra=f"poison_hits={poison_hits},refreshes={refreshes}")
+                    safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
+                    await asyncio.sleep(SLEEP_BETWEEN_DOWNLOADS)
+                    break  # move to next file
+
+                # Refresh session and then retry SAME file (inner-loop continue)
+                loud_session_poison_alert(dataset_id, filename)
+                log(f"[DS {dataset_id}] Auto-refreshing session context (hands-free)... (refresh {refreshes+1}/{POISON_REFRESHES_BEFORE_SKIP})")
+                entry["poison_refreshes"] = refreshes + 1
+                safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
+
+                try:
+                    await context.close()
+                except Exception:
+                    pass
+
+                context, _auth_page = await create_fresh_context(browser, base_url.format(1), dataset_id=dataset_id)
+                log(f"[DS {dataset_id}] Session refreshed. Retrying {filename}...")
+                await asyncio.sleep(0.2)
+                continue  # <-- ACTUALLY retries the same filename now
+
+            # --- Normal error path ---
             entry["attempts"] = int(entry.get("attempts", 0)) + 1
-            entry["downloaded"] = True
-            entry["downloaded_at"] = datetime.now().isoformat(timespec="seconds")
-            entry["last_error"] = None
-            try:
-                entry["bytes"] = os.path.getsize(out_path)
-            except Exception:
-                pass
+            entry["last_error"] = err
 
-            completed += 1
-            log(f"[DS {dataset_id}] DONE ({completed}) {filename}")
-
-            safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
-            await asyncio.sleep(SLEEP_BETWEEN_DOWNLOADS)
-            continue
-
-        if err == "SESSION_POISON":
-            entry["last_error"] = "SESSION_POISON (non-PDF response)"
-            log(f"[DS {dataset_id}] SESSION POISON DETECTED while downloading {filename}")
+            log(f"[DS {dataset_id}] ERROR {err} for {filename}")
             safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
 
-            loud_session_poison_alert(dataset_id, filename)
-            log(f"[DS {dataset_id}] Auto-refreshing session context (hands-free)...")
+            if isinstance(err, str) and err.startswith("HTTP "):
+                SESSION["http_errors"] += 1
+                _ds_stats(dataset_id)["http_errors"] += 1
+            else:
+                SESSION["other_errors"] += 1
+                _ds_stats(dataset_id)["other_errors"] += 1
 
-            try:
-                await context.close()
-            except Exception:
-                pass
+            is_retryable = False
+            if isinstance(err, str) and (err.startswith("RETRYABLE_NET:") or err.startswith("AIOHTTP ")):
+                is_retryable = True
+            elif isinstance(err, str) and is_retryable_playwright_error(err):
+                is_retryable = True
 
-            context, _auth_page = await create_fresh_context(browser, base_url.format(1), dataset_id=dataset_id)
-
-            log(f"[DS {dataset_id}] Session refreshed. Retrying {filename}...")
-            await asyncio.sleep(0.1)
-            continue
-
-        entry["attempts"] = int(entry.get("attempts", 0)) + 1
-        entry["last_error"] = err
-        log(f"[DS {dataset_id}] ERROR {err} for {filename}")
-        safe_json_save(index_path_for_dataset(out_dir, DATASETS[dataset_id]["index_file"]), idx)
-        await asyncio.sleep(SLEEP_BETWEEN_DOWNLOADS)
+            if is_retryable:
+                SESSION["retryable_net_errors"] += 1
+                _ds_stats(dataset_id)["retryable_net_errors"] += 1
+                delay = backoff_sleep_seconds(int(entry.get("attempts", 1)))
+                log(f"[DS {dataset_id}] Retryable network error -> backoff {delay:.2f}s")
+                await asyncio.sleep(delay)
+                continue  # retry same file (until attempts exhausted)
+            else:
+                await asyncio.sleep(SLEEP_BETWEEN_DOWNLOADS)
+                break  # non-retryable -> move to next file
 
     return completed, context
 
@@ -862,7 +1095,6 @@ async def process_dataset(browser, dataset_id: int, cfg: Dict[str, Any], mode: s
     try:
         context, auth_page = await create_fresh_context(browser, base_url.format(1), dataset_id=dataset_id)
 
-        # If auth_page was closed by config, we can still scan by opening a new page.
         scan_page = auth_page
         if mode in {"scan", "sync"} and scan_page is None:
             scan_page = await context.new_page()
@@ -872,7 +1104,7 @@ async def process_dataset(browser, dataset_id: int, cfg: Dict[str, Any], mode: s
 
         if mode in {"download", "sync"}:
             completed, context = await download_missing_from_index(browser, context, dataset_id, out_dir, idx, base_url)
-            log(f"[DS {dataset_id}] Download pass complete ΓÇö {completed} new PDFs")
+            log(f"[DS {dataset_id}] Download pass complete — {completed} new PDFs")
 
         safe_json_save(idx_path, idx)
 
@@ -978,4 +1210,9 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        log("KeyboardInterrupt received — shutting down.")
+    finally:
+        print_session_summary()
