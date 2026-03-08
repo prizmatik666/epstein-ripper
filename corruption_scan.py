@@ -14,11 +14,6 @@ Standalone Directory Corruption Scanner
 # Author: Prizm (Prizmatik Underground)
 # Repository:
 # https://github.com/prizmatik666/epstein-ripper
-#
-# Support Development:
-# PayPal: https://www.paypal.com/ncp/payment/VVDAXZGKPQZKW
-# Email: prizmatikug@gmail.com
-#
 # ============================================================
 import os
 from pathlib import Path
