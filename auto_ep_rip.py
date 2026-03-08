@@ -74,17 +74,7 @@
 # BUT- a 404 error during download would suggest files that DOJ removed
 # since your datasets index file was built - sneaky sneaky
 #-------------------------------------------------------#
-#!/usr/bin/env python3
-# Epstein DOJ Dataset Tools
-#
-# Author: Prizm (Prizmatik Underground)
-# Repository:
-# https://github.com/prizmatik666/epstein-ripper
-#
-# Support Development:
-# PayPal: https://www.paypal.com/ncp/payment/VVDAXZGKPQZKW
-# Email: prizmatikug@gmail.com
-#==========================================================#
+
 import os
 import re
 import json
