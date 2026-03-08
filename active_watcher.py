@@ -20,18 +20,7 @@ Notes:
 - This watcher is intentionally session-based (no resume state file),
   because the whole point is: scan only "incoming after start".
 """
-# ============================================================
-# Epstein DOJ Dataset Tools
-#
-# Author: Prizm (Prizmatik Underground)
-# Repository:
-# https://github.com/prizmatik666/epstein-ripper
-#
-# Support Development:
-# PayPal: https://www.paypal.com/ncp/payment/VVDAXZGKPQZKW
-# Email: prizmatikug@gmail.com
-#
-# ============================================================
+
 import os
 import sys
 import time
