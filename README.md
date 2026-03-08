@@ -330,31 +330,6 @@ I will be trying to find the fastest, most reliable, and above all ACURATE - way
 - dupe_index.py -> duplicates a .json index and flips all download= values to false - making it into a fresh runable copy to be shared or freshly ran for download.
  - will make it useable on db files when db functionality is adopted in the main program also
 
-## Support
-------------------------------------------------------------------------
-This project is developed and maintained independently by Prizm
-(Prizmatik Underground).
-
-If this tool has been useful to you, consider supporting future
-development and research:
-
-PayPal Donation Link:
-https://www.paypal.com/ncp/payment/VVDAXZGKPQZKW
-
-PayPal Email:
-prizmatikug@gmail.com
-
-Original Repository:
-https://github.com/prizmatik666/epstein-ripper
-
-Thank you for supporting independent open-source tools.
-
-If you don't want to donate thats totally fine, but please, if you found this helpful- star the repo :) thank you!!
-
-Death to .PDF's
-
-------------------------------------------------------------------------
-
 ## Disclaimer
 
 This tool accesses publicly available DOJ materials.
