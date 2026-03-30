@@ -252,7 +252,7 @@ Index reconciliation tool.
     back to false
 ------------------------------------------------------------------------
 
-### image_ripper.py
+# image_ripper.py
 
 Bulk embedded image extractor (GUI).
 
@@ -276,11 +276,24 @@ Designed for:
 -   Visual content isolation
 
 ------------------------------------------------------------------------
+# filter_ripped_images.py
+-----------------------
+ sorts folder containing image (like pulled from pdf's
+ using image_ripper . And moves all black(redatcted)
+ images, images that appear to be all text/documents, and
+ other images that have traits that dont seem like an
+ image/picture. It puts these in different categories/buckets
+ to go through manually and review. I suggest using (M)ove
+ instead of (C)opy , to avoid massive memory ballooning on hard disk
+ that would happen from copying a massive ammount of files
+ on a harddisk
 
-## Requirements
+example:
+I ran image_ripper on the datasets i have (far from complete, but several hundred thousand pdf's) - i ended up with over 400k+ image files ripped. After running this filter program on my ripped_images, i reviewed what it pulled out and it was very accurate. Not many images that I needed to save out of the images it pulled out. I havent gone through all of what was left behind, but i did go through the pulls - and out of the almost half million images, over 300k were moved from the scanned dir. 
 
-## Requirements
+making, imo, this a very valuable tool in cleaning up the extracted images from using image_ripper.py
 
+## Requirements for ripper
 - Python 3.9+
 - Playwright
 - aiohttp
