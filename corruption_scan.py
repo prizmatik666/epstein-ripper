@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """
 Standalone Directory Corruption Scanner
-
+ this is a hold-over util from the legacy
+ versions when this was needed during testing
+ and such. Decided to keep as a "just-in-case"
+ or interesting code example for scanning files
+ for something. it's not particularly needed
+ now since the checks for this happen in the
+ ripper.
+ 
 - Prompts for directory
 - Scans all files (non-recursive)
 - Detects HTML / age-verification corruption
