@@ -1,7 +1,12 @@
 # EPSTEIN-RIPPER
 Tools for automated indexing and download of DOJ epstein files data-sets.
 
-NEW-UPGRADE :: 4/24/2026
+*small note*
+although db_scanner detects and can work on any .json or .sqlite file in a data# dir
+EpRip expects:  index_data#.(sqlite/json) for the naming format inside the corresponding data# directory
+*end note*
+
+NEW-UPGRADE :: 4/24/2026 
 - faster
     - upgraded to sqlite index use
     - massive speed increase over json
