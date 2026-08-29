@@ -1,6 +1,8 @@
 # EPSTEIN-RIPPER
 Tools for automated indexing and download of DOJ epstein files data-sets.
 
+Although i haven't actively done any development on this project in a while now, i did go and make new sqlite index files. High confidence, long run index scans. problem is they're too big even with compression for me to share on github, so i do appologize for this :( I'm still proud of what i've created here and happy to see it still getting use (clones), i just wish i could include these new much larger collected index files for you all
+
 *small note*
 although db_scanner detects and can work on any .json or .sqlite file in a data# dir
 EpRip expects:  index_data#.(sqlite/json) for the naming format inside the corresponding data# directory
